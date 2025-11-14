@@ -1,0 +1,5 @@
+# This file enables Tokio's unstable features, which are required for accessing
+# runtime metrics like the number of worker threads.
+# This is the recommended way to set compile-time configuration flags for a project.
+[build]
+rustflags = ["--cfg", "tokio_unstable"]
