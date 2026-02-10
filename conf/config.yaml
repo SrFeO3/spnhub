@@ -1,0 +1,183 @@
+realms:
+    - name: production_realm
+      title: ショップシステム
+      description: Realm for the production environment.
+      signingKey: |
+          -----BEGIN PUBLIC KEY-----
+          -----END PUBLIC KEY-----
+      signingKey: |
+          -----BEGIN PRIVATE KEY-----
+          -----END PRIVATE KEY-----
+      cacert: |
+          -----BEGIN CERTIFICATE-----
+              dummy cert
+          -----END CERTIFICATE-----
+      sessionTimeout: 2592000
+      administrators:
+          - admin1@example.com
+          - admin2@example.com
+      zones:
+          - name: sr.example.com
+            title: Shop zone sr.example.com
+            description: DNS zone configuration for the shop.
+            dnsProvider:
+            acmeCertificateProvider:
+            subdomains:
+                - name: sirius
+                  title: sirius
+                  description: Subdomain configuration for 'sirius'.
+      hubs:
+          - name: hub1
+            title: Hub hub1
+            description: SpnHub instance for the production environment.
+            fqdn: spnhub.sr.example.com
+            serverPort: 443
+            serverCert: |
+                -----BEGIN CERTIFICATE-----
+                    dummy cert
+                -----END CERTIFICATE-----
+            serverCertKey: |
+                -----BEGIN PRIVATE KEY-----
+                    dummy cert key
+                -----END PRIVATE KEY-----
+            services:
+                - name: api
+                  title: api service
+                  description: API service for retrieving fruit product data.
+                  availabilityManagement:
+                    ondemandStart: true
+                    idleTimeout: 0  # no shutdown
+                    image: "svr-api"
+                    command:
+                    env:
+                  provider:
+                      - urn:chip-in:end-point:hub.master.sr.example.com:api-server
+                  consumers:
+                      - urn:chip-in:end-point:hub.master.sr.example.com:api-gateway
+                  singleton: false
+                - name: auth
+                  title: auth service
+                  description: OpenID Connect (OIDC) authentication service.
+                  availabilityManagement:
+                    ondemandStart: true
+                    idleTimeout: 0  # no shutdown
+                    image: "svr-auth"
+                    command:
+                    env:
+                  provider:
+                      - urn:chip-in:end-point:hub.master.sr.example.com:auth-server
+                  consumers:
+                      - urn:chip-in:end-point:hub.master.sr.example.com:auth-gateway
+                  singleton: false
+                - name: database
+                  title: database service
+                  description: Database service for the fruit shop.
+                  availabilityManagement:
+                    ondemandStart: true
+                    idleTimeout: 0  # no shutdown
+                    image: "svr-db"
+                    command:
+                    env:
+                  provider:
+                      - urn:chip-in:end-point:hub.master.sr.example.com:database-server
+                  consumers:
+                      - urn:chip-in:end-point:hub.master.sr.example.com:database-client
+                  singleton: false
+                - name: www
+                  title: www service
+                  description: Web frontend service for the fruit shop.
+                  availabilityManagement:
+                    ondemandStart: true
+                    idleTimeout: 0  # no shutdown
+                    image: "svr-www"
+                    command:
+                    env:
+                  provider:
+                      - urn:chip-in:end-point:hub.master.sr.example.com:www-contents-server
+                  consumers:
+                      - urn:chip-in:end-point:hub.master.sr.example.com:www-gateway
+                  singleton: false
+      virtualHosts:
+          - hostname: "sirius.sr.example.com"
+            description: Virtual host configuration for the main shop website.
+            subdomain: urn:chip-in:subdomain:shop:sr.example.com:sirius
+            routingChain: urn:chip-in:routing-chain:shop:fruit-shop-route
+            accessLogMaxValueLength: 512
+            certificate: |
+                -----BEGIN CERTIFICATE-----
+                    dummy cert
+                -----END CERTIFICATE-----
+            key: |
+                -----BEGIN PRIVATE KEY-----
+                    dummy cert key
+                -----END PRIVATE KEY-----
+            disabled: false
+      routingChains:
+          - name: fruit-shop-route
+            title: Routing-Chain fruit-shop-route
+            description: Routing chain for fruit shop request handling.
+            rules:
+                - match: request.path == '/set-device-id'
+                  action:
+                      type: setDeviceId
+                      expiration: null
+    - name: development_realm
+      title: 開発システム
+      description: Realm for the development environment.
+      signingKey: |
+          -----BEGIN PUBLIC KEY-----
+          -----END PUBLIC KEY-----
+      signingKey: |
+          -----BEGIN PRIVATE KEY-----
+          -----END PRIVATE KEY-----
+      cacert: |
+          -----BEGIN CERTIFICATE-----
+              dummy cert
+          -----END CERTIFICATE-----
+      sessionTimeout: 2592000
+      administrators:
+          - admin1dev@example.com
+          - admin2@devexample.com
+      hubs:
+          - name: hub1d
+            title: Hub hub1d
+            description: SpnHub instance for the development environment.
+            fqdn: spnhub.dev.example.com
+            serverPort: 443
+            serverCert: |
+                -----BEGIN CERTIFICATE-----
+                    dummy cert
+                -----END CERTIFICATE-----
+            serverCertKey: |
+                -----BEGIN PRIVATE KEY-----
+                    dummy cert key
+                -----END PRIVATE KEY-----
+            services:
+                - name: api
+                  title: api service
+                  description: API service for retrieving fruit product data.
+                  availabilityManagement:
+                    ondemandStart: true
+                    idleTimeout: 0  # no shutdown
+                    image: "svr-api"
+                    command:
+                    env:
+                  provider:
+                      - urn:chip-in:end-point:hub.master.dev.example.com:api-server
+                  consumers:
+                      - urn:chip-in:end-point:hub.master.dev.example.com:api-gateway
+                  singleton: false
+                - name: auth
+                  title: auth service
+                  description: OpenID Connect (OIDC) authentication service.
+                  availabilityManagement:
+                    ondemandStart: true
+                    idleTimeout: 0  # no shutdown
+                    image: "svr-auth"
+                    command:
+                    env:
+                  provider:
+                      - urn:chip-in:end-point:hub.master.dev.example.com:auth-server
+                  consumers:
+                      - urn:chip-in:end-point:hub.master.dev.example.com:auth-gateway
+                  singleton: false
