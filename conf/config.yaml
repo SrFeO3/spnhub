@@ -3,15 +3,34 @@ realms:
       title: ショップシステム
       description: Realm for the production environment.
       signingKey: |
-          -----BEGIN PUBLIC KEY-----
-          -----END PUBLIC KEY-----
+            -----BEGIN PUBLIC KEY-----
+            -----END PUBLIC KEY-----
       signingKey: |
-          -----BEGIN PRIVATE KEY-----
-          -----END PRIVATE KEY-----
+            -----BEGIN PRIVATE KEY-----
+            -----END PRIVATE KEY-----
       cacert: |
-          -----BEGIN CERTIFICATE-----
-              dummy cert
-          -----END CERTIFICATE-----
+            -----BEGIN CERTIFICATE-----
+            MIIDmTCCAoGgAwIBAgIUQFlH+y76TW4GCwvGWEESfT4sTZAwDQYJKoZIhvcNAQEL
+            BQAwXDELMAkGA1UEBhMCSlAxDjAMBgNVBAgMBVRva3lvMQ0wCwYDVQQHDARVZW5v
+            MRQwEgYDVQQKDAtUZXN0U2VydmljZTEYMBYGA1UEAwwPTXlUZXN0U2VydmljZUNB
+            MB4XDTI1MDkyNDA1NDkzNFoXDTM1MDkyMjA1NDkzNFowXDELMAkGA1UEBhMCSlAx
+            DjAMBgNVBAgMBVRva3lvMQ0wCwYDVQQHDARVZW5vMRQwEgYDVQQKDAtUZXN0U2Vy
+            dmljZTEYMBYGA1UEAwwPTXlUZXN0U2VydmljZUNBMIIBIjANBgkqhkiG9w0BAQEF
+            AAOCAQ8AMIIBCgKCAQEAvqP7GuNgv5umIIXK+QqT2auq56x1oSAA+oP4Fmp+sjcO
+            e08QES/LlbXesVRYHHV624qInpdEKTwuENxZi0+mkm5zO09GFlQiKvas3YvN5Ecq
+            aWVoPWHezcXt2K+ogNU1rjPqgENvpKnWtzZPGIHiKnN0/taUR7AotxPg4wV1QVuv
+            EgavXqIFGBhH+Os+6HnCls3XukmMBu3YTxgB6wwYUHbXqzBQNivugXU1AFx1a7tI
+            GRCGEAJiJ//g1mTu8Ji2/XvN/QpkSv5GgjwDToB07ZvRNSOarODOwT37Fr87Nfy1
+            IpIGcmbNcpJik+LNqpyfdUALuLyXAbjjYw7OML9HqwIDAQABo1MwUTAdBgNVHQ4E
+            FgQUKazWF2yeXfg6aTVhYFwTyT3idPQwHwYDVR0jBBgwFoAUKazWF2yeXfg6aTVh
+            YFwTyT3idPQwDwYDVR0TAQH/BAUwAwEB/zANBgkqhkiG9w0BAQsFAAOCAQEAa9Qc
+            TEzjkbIWczZ1h9xDriG8RcST0pmdTR2QMo/UeaJayNjtxp9rEuNVW8Xs7COENtPv
+            wfq/X3RLXh+YBYT2qC0qO1HuAoLOHchxKMEJBJo1QjVkNmJHtIq6sddzm16EmW0o
+            jz2dN3fp1S9PvLwKha8YOMX1R9eiwT7UHAXJjOud6xdF6T8veDvhrFKTsKxgKFkG
+            NoUiNw+rzOVCOuwgt1I7VcfIgA0dmjDz3RlK1nPXroZaeMKgLEAyLPh704h8vvDT
+            ZHgx+Nrf1b+TNgNLxpnmqFH4NWdezFSfvHHRBOY3sFvMJFU81fnk3QTZYnRwrsSD
+            M7eKGakIiHjPZDWOEg==
+            -----END CERTIFICATE-----
       sessionTimeout: 2592000
       administrators:
           - admin1@example.com
@@ -31,14 +50,60 @@ realms:
             title: Hub hub1
             description: SpnHub instance for the production environment.
             fqdn: spnhub.sr.example.com
-            serverPort: 443
+            serverAddress: "0.0.0.0"
+            serverPort: 8443
             serverCert: |
                 -----BEGIN CERTIFICATE-----
-                    dummy cert
+                MIIDwTCCAqmgAwIBAgIUCA/6r1GSV9cc5djXCRP0Q7yy9aEwDQYJKoZIhvcNAQEL
+                BQAwWzELMAkGA1UEBhMCSlAxDjAMBgNVBAgMBVRva3lvMQ0wCwYDVQQHDARVZW5v
+                MRQwEgYDVQQKDAtUZXN0U2VydmljZTEXMBUGA1UEAwwOTXlUZXN0U2VydmVyQ0Ew
+                HhcNMjUwOTI0MDYwODM0WhcNMzUwOTIyMDYwODM0WjBTMQswCQYDVQQGEwJKUDEO
+                MAwGA1UECAwFVG9reW8xDTALBgNVBAcMBFVlbm8xFDASBgNVBAoMC1Rlc3RTZXJ2
+                aWNlMQ8wDQYDVQQDDAZTcG5IdWIwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEK
+                AoIBAQCSDsM+uOZTqDVHpz8I1fLKDW47FmBavVxTH4VcK/ahn3AWGuYK9q+pU6nr
+                /6qTAwSCYR66ZCd3D4bQbVQYDMuR/52jhRHoDjVSjN7DqgvkIGGViT3SoYahIWbM
+                qqsUQoYfoGwIj7E3wK5oxMUF6tWxiz2EtNS58NTsIubUioxLusmRsFzdxAkxdbyI
+                Ucoh9dNEv+WANtIrmVNjc7MJD8MfYb7LXk0uJxkCASfRR7M3M53uROIoCf3uBv1n
+                XLR1c/CImY9p3hl4q2EBpdRKp9uXJB9EciMuWKQNFNBHQ88KNIlRyUFJqmPq3eLC
+                FZS6Sj3VMXqcsVM8HMINH6B30bXJAgMBAAGjgYQwgYEwPwYDVR0RBDgwNoIWc3Bu
+                aHViLndnZC5leGFtcGxlLmNvbYIWZGViMTQyLndnZC5leGFtcGxlLmNvbYcEwKgK
+                jjAdBgNVHQ4EFgQU5jBtM4HozO8TRdVSpcpA1H9cXdMwHwYDVR0jBBgwFoAUvFcu
+                sI6P+DTZkDYeuGYY0HIxLNowDQYJKoZIhvcNAQELBQADggEBAH3KnrTNlCl7YaAR
+                rMMomxseh7rixoo1xSmejFg0Ypn70ES6WcHI4uBNkrnGdXfhlV5zwFJnvSTowQCM
+                8RVZHWn8AJLai+sYHcby6OYrpE6EPKrRi12mqrrPs1sducycwFmnWYPzmL3xwIJv
+                i3YDkqc78a+hO2u4cXbY2mDpxRwBKkt+MIg14zp+SKAP3UjAkV02Q07+SNEyMUXL
+                QX88c2ok3vDgRIAx31XMtFNIU7QN+sGS0MnsgZSN8zQtImm6hyq/8HE6xZuqToGg
+                JHs5YNSSenAmkdUlcehdWsZ3N9ZPY25DxmJV5hEWFo3cDM7YA2KJv4AKxLF7zICT
+                1zLoXD8=
                 -----END CERTIFICATE-----
             serverCertKey: |
                 -----BEGIN PRIVATE KEY-----
-                    dummy cert key
+                MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCSDsM+uOZTqDVH
+                pz8I1fLKDW47FmBavVxTH4VcK/ahn3AWGuYK9q+pU6nr/6qTAwSCYR66ZCd3D4bQ
+                bVQYDMuR/52jhRHoDjVSjN7DqgvkIGGViT3SoYahIWbMqqsUQoYfoGwIj7E3wK5o
+                xMUF6tWxiz2EtNS58NTsIubUioxLusmRsFzdxAkxdbyIUcoh9dNEv+WANtIrmVNj
+                c7MJD8MfYb7LXk0uJxkCASfRR7M3M53uROIoCf3uBv1nXLR1c/CImY9p3hl4q2EB
+                pdRKp9uXJB9EciMuWKQNFNBHQ88KNIlRyUFJqmPq3eLCFZS6Sj3VMXqcsVM8HMIN
+                H6B30bXJAgMBAAECggEAFzHH+MR1M1DRkTzyii0rvsGOQUzm5VIQANVPINmMc5M1
+                whTodlJBiCLUp7k0td7zTt8seY4hJEuvbZcHFUCm7VsKBidCNjdXaXIciDcPZ11r
+                Ecu3KSVkk18SC6uIupFr6kbYES38hy2OpO2mmi92WxkRHmt3IsYnkg5i2Nrdt8LG
+                +pkCfTD6Swg/A0+nU3p7MNXNOoNrnBnB2jCgK56cpShtWP4KXEwIYKQZROF+A2Cf
+                fVgZ/oXyYTgUJ0gQlWtKYDMhNC+gMUQXaK55RS90+L7bHwmOnm8DYqCCp4eu4Obu
+                6W3eYowIJ8OGuDsoc6CVsj1bA3PB8GJr5F0GMUZBmQKBgQDJqmOwLQU5AlQfo36G
+                tlVqzWLS+mujq74IDeDFsZu9ezYNSoc3wyeUos9FZHEUWK9mAwYL99Fb3X4BiUd4
+                09yNOIzbDWh16X8iwna5TOELR+Yhl4Y8YV92gsr6j4rMIDq4OLkxx276DYPU9hjj
+                GXXAA4tiSCj2vC1AQzqWEcysFQKBgQC5aOR6EEJDb6ZjzSI0xO7e0oXKzOoDAqIe
+                QqisxEp1MoDQOkv/+QozUX6bU38RX9wfE3wmeNW9mPqwimifTSBKiwjeowKAFG+W
+                UwM5c5smJnzzrd02gnOXsBj6G+BCWWVAZ9eTn++PzJvNxm5XwPQkBGrFhubnsb/O
+                K20poVNr5QKBgFQOBQcFfMvKQK3/Q1l63hdqC+rMHdlWWBqbTjiYUsWjeWAI1FtV
+                qEW3ppTRzKAiZtkqIXcTj9uucjrJsVSXWbIzA+K5r/SVojwmub16YcKF8VHHClhY
+                baXD1j6hXcS/Gjp2yhoJeiQXRf+Zo73kesPRtmL8mLZesK28V8r9GEYRAoGAbVR5
+                7bRqroNG1XDf68f4pzHyrOx6TT4fRMK/3eh9k3AtXxwRNqauqiYzBvqMYj1penWt
+                7q2wM/XiVXm4Sb9b/DjSCR6MWeQzDKx0qUsPQMbPRY3PdNYlvVucztbjPZyjRQA2
+                sZlM1Tms4gFRjbN9A0QLheCPhi5dUQBwhWzY2TUCgYEAjk+r91MHg4BJxfhqnQFE
+                gve2+733Q88eYdqMXOc+azWLl+77quW3Jukfvs0yX01o8t5SHDZtn3l4pdfOFiDO
+                IeFv0sgzvtwfuPnMTl/ferpKVYiSkECVjM9kw7UfcxFXs4LO48OYS4k+xtBlfN+V
+                PI6sEq8IU7mqeHLddOGJXuw=
                 -----END PRIVATE KEY-----
             services:
                 - name: api
@@ -50,8 +115,7 @@ realms:
                     image: "svr-api"
                     command:
                     env:
-                  provider:
-                      - urn:chip-in:end-point:hub.master.sr.example.com:api-server
+                  provider: urn:chip-in:end-point:hub.master.sr.example.com:api-server
                   consumers:
                       - urn:chip-in:end-point:hub.master.sr.example.com:api-gateway
                   singleton: false
@@ -64,8 +128,7 @@ realms:
                     image: "svr-auth"
                     command:
                     env:
-                  provider:
-                      - urn:chip-in:end-point:hub.master.sr.example.com:auth-server
+                  provider: urn:chip-in:end-point:hub.master.sr.example.com:auth-server
                   consumers:
                       - urn:chip-in:end-point:hub.master.sr.example.com:auth-gateway
                   singleton: false
@@ -78,8 +141,7 @@ realms:
                     image: "svr-db"
                     command:
                     env:
-                  provider:
-                      - urn:chip-in:end-point:hub.master.sr.example.com:database-server
+                  provider: urn:chip-in:end-point:hub.master.sr.example.com:database-server
                   consumers:
                       - urn:chip-in:end-point:hub.master.sr.example.com:database-client
                   singleton: false
@@ -92,8 +154,7 @@ realms:
                     image: "svr-www"
                     command:
                     env:
-                  provider:
-                      - urn:chip-in:end-point:hub.master.sr.example.com:www-contents-server
+                  provider: urn:chip-in:end-point:hub.master.sr.example.com:www-contents-server
                   consumers:
                       - urn:chip-in:end-point:hub.master.sr.example.com:www-gateway
                   singleton: false
@@ -125,15 +186,34 @@ realms:
       title: 開発システム
       description: Realm for the development environment.
       signingKey: |
-          -----BEGIN PUBLIC KEY-----
-          -----END PUBLIC KEY-----
+            -----BEGIN PUBLIC KEY-----
+            -----END PUBLIC KEY-----
       signingKey: |
-          -----BEGIN PRIVATE KEY-----
-          -----END PRIVATE KEY-----
+            -----BEGIN PRIVATE KEY-----
+            -----END PRIVATE KEY-----
       cacert: |
-          -----BEGIN CERTIFICATE-----
-              dummy cert
-          -----END CERTIFICATE-----
+            -----BEGIN CERTIFICATE-----
+            MIIDmTCCAoGgAwIBAgIUQFlH+y76TW4GCwvGWEESfT4sTZAwDQYJKoZIhvcNAQEL
+            BQAwXDELMAkGA1UEBhMCSlAxDjAMBgNVBAgMBVRva3lvMQ0wCwYDVQQHDARVZW5v
+            MRQwEgYDVQQKDAtUZXN0U2VydmljZTEYMBYGA1UEAwwPTXlUZXN0U2VydmljZUNB
+            MB4XDTI1MDkyNDA1NDkzNFoXDTM1MDkyMjA1NDkzNFowXDELMAkGA1UEBhMCSlAx
+            DjAMBgNVBAgMBVRva3lvMQ0wCwYDVQQHDARVZW5vMRQwEgYDVQQKDAtUZXN0U2Vy
+            dmljZTEYMBYGA1UEAwwPTXlUZXN0U2VydmljZUNBMIIBIjANBgkqhkiG9w0BAQEF
+            AAOCAQ8AMIIBCgKCAQEAvqP7GuNgv5umIIXK+QqT2auq56x1oSAA+oP4Fmp+sjcO
+            e08QES/LlbXesVRYHHV624qInpdEKTwuENxZi0+mkm5zO09GFlQiKvas3YvN5Ecq
+            aWVoPWHezcXt2K+ogNU1rjPqgENvpKnWtzZPGIHiKnN0/taUR7AotxPg4wV1QVuv
+            EgavXqIFGBhH+Os+6HnCls3XukmMBu3YTxgB6wwYUHbXqzBQNivugXU1AFx1a7tI
+            GRCGEAJiJ//g1mTu8Ji2/XvN/QpkSv5GgjwDToB07ZvRNSOarODOwT37Fr87Nfy1
+            IpIGcmbNcpJik+LNqpyfdUALuLyXAbjjYw7OML9HqwIDAQABo1MwUTAdBgNVHQ4E
+            FgQUKazWF2yeXfg6aTVhYFwTyT3idPQwHwYDVR0jBBgwFoAUKazWF2yeXfg6aTVh
+            YFwTyT3idPQwDwYDVR0TAQH/BAUwAwEB/zANBgkqhkiG9w0BAQsFAAOCAQEAa9Qc
+            TEzjkbIWczZ1h9xDriG8RcST0pmdTR2QMo/UeaJayNjtxp9rEuNVW8Xs7COENtPv
+            wfq/X3RLXh+YBYT2qC0qO1HuAoLOHchxKMEJBJo1QjVkNmJHtIq6sddzm16EmW0o
+            jz2dN3fp1S9PvLwKha8YOMX1R9eiwT7UHAXJjOud6xdF6T8veDvhrFKTsKxgKFkG
+            NoUiNw+rzOVCOuwgt1I7VcfIgA0dmjDz3RlK1nPXroZaeMKgLEAyLPh704h8vvDT
+            ZHgx+Nrf1b+TNgNLxpnmqFH4NWdezFSfvHHRBOY3sFvMJFU81fnk3QTZYnRwrsSD
+            M7eKGakIiHjPZDWOEg==
+            -----END CERTIFICATE-----
       sessionTimeout: 2592000
       administrators:
           - admin1dev@example.com
@@ -143,14 +223,60 @@ realms:
             title: Hub hub1d
             description: SpnHub instance for the development environment.
             fqdn: spnhub.dev.example.com
-            serverPort: 443
+            serverAddress: "0.0.0.0"
+            serverPort: 9443
             serverCert: |
                 -----BEGIN CERTIFICATE-----
-                    dummy cert
+                MIIDwTCCAqmgAwIBAgIUCA/6r1GSV9cc5djXCRP0Q7yy9aEwDQYJKoZIhvcNAQEL
+                BQAwWzELMAkGA1UEBhMCSlAxDjAMBgNVBAgMBVRva3lvMQ0wCwYDVQQHDARVZW5v
+                MRQwEgYDVQQKDAtUZXN0U2VydmljZTEXMBUGA1UEAwwOTXlUZXN0U2VydmVyQ0Ew
+                HhcNMjUwOTI0MDYwODM0WhcNMzUwOTIyMDYwODM0WjBTMQswCQYDVQQGEwJKUDEO
+                MAwGA1UECAwFVG9reW8xDTALBgNVBAcMBFVlbm8xFDASBgNVBAoMC1Rlc3RTZXJ2
+                aWNlMQ8wDQYDVQQDDAZTcG5IdWIwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEK
+                AoIBAQCSDsM+uOZTqDVHpz8I1fLKDW47FmBavVxTH4VcK/ahn3AWGuYK9q+pU6nr
+                /6qTAwSCYR66ZCd3D4bQbVQYDMuR/52jhRHoDjVSjN7DqgvkIGGViT3SoYahIWbM
+                qqsUQoYfoGwIj7E3wK5oxMUF6tWxiz2EtNS58NTsIubUioxLusmRsFzdxAkxdbyI
+                Ucoh9dNEv+WANtIrmVNjc7MJD8MfYb7LXk0uJxkCASfRR7M3M53uROIoCf3uBv1n
+                XLR1c/CImY9p3hl4q2EBpdRKp9uXJB9EciMuWKQNFNBHQ88KNIlRyUFJqmPq3eLC
+                FZS6Sj3VMXqcsVM8HMINH6B30bXJAgMBAAGjgYQwgYEwPwYDVR0RBDgwNoIWc3Bu
+                aHViLndnZC5leGFtcGxlLmNvbYIWZGViMTQyLndnZC5leGFtcGxlLmNvbYcEwKgK
+                jjAdBgNVHQ4EFgQU5jBtM4HozO8TRdVSpcpA1H9cXdMwHwYDVR0jBBgwFoAUvFcu
+                sI6P+DTZkDYeuGYY0HIxLNowDQYJKoZIhvcNAQELBQADggEBAH3KnrTNlCl7YaAR
+                rMMomxseh7rixoo1xSmejFg0Ypn70ES6WcHI4uBNkrnGdXfhlV5zwFJnvSTowQCM
+                8RVZHWn8AJLai+sYHcby6OYrpE6EPKrRi12mqrrPs1sducycwFmnWYPzmL3xwIJv
+                i3YDkqc78a+hO2u4cXbY2mDpxRwBKkt+MIg14zp+SKAP3UjAkV02Q07+SNEyMUXL
+                QX88c2ok3vDgRIAx31XMtFNIU7QN+sGS0MnsgZSN8zQtImm6hyq/8HE6xZuqToGg
+                JHs5YNSSenAmkdUlcehdWsZ3N9ZPY25DxmJV5hEWFo3cDM7YA2KJv4AKxLF7zICT
+                1zLoXD8=
                 -----END CERTIFICATE-----
             serverCertKey: |
                 -----BEGIN PRIVATE KEY-----
-                    dummy cert key
+                MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCSDsM+uOZTqDVH
+                pz8I1fLKDW47FmBavVxTH4VcK/ahn3AWGuYK9q+pU6nr/6qTAwSCYR66ZCd3D4bQ
+                bVQYDMuR/52jhRHoDjVSjN7DqgvkIGGViT3SoYahIWbMqqsUQoYfoGwIj7E3wK5o
+                xMUF6tWxiz2EtNS58NTsIubUioxLusmRsFzdxAkxdbyIUcoh9dNEv+WANtIrmVNj
+                c7MJD8MfYb7LXk0uJxkCASfRR7M3M53uROIoCf3uBv1nXLR1c/CImY9p3hl4q2EB
+                pdRKp9uXJB9EciMuWKQNFNBHQ88KNIlRyUFJqmPq3eLCFZS6Sj3VMXqcsVM8HMIN
+                H6B30bXJAgMBAAECggEAFzHH+MR1M1DRkTzyii0rvsGOQUzm5VIQANVPINmMc5M1
+                whTodlJBiCLUp7k0td7zTt8seY4hJEuvbZcHFUCm7VsKBidCNjdXaXIciDcPZ11r
+                Ecu3KSVkk18SC6uIupFr6kbYES38hy2OpO2mmi92WxkRHmt3IsYnkg5i2Nrdt8LG
+                +pkCfTD6Swg/A0+nU3p7MNXNOoNrnBnB2jCgK56cpShtWP4KXEwIYKQZROF+A2Cf
+                fVgZ/oXyYTgUJ0gQlWtKYDMhNC+gMUQXaK55RS90+L7bHwmOnm8DYqCCp4eu4Obu
+                6W3eYowIJ8OGuDsoc6CVsj1bA3PB8GJr5F0GMUZBmQKBgQDJqmOwLQU5AlQfo36G
+                tlVqzWLS+mujq74IDeDFsZu9ezYNSoc3wyeUos9FZHEUWK9mAwYL99Fb3X4BiUd4
+                09yNOIzbDWh16X8iwna5TOELR+Yhl4Y8YV92gsr6j4rMIDq4OLkxx276DYPU9hjj
+                GXXAA4tiSCj2vC1AQzqWEcysFQKBgQC5aOR6EEJDb6ZjzSI0xO7e0oXKzOoDAqIe
+                QqisxEp1MoDQOkv/+QozUX6bU38RX9wfE3wmeNW9mPqwimifTSBKiwjeowKAFG+W
+                UwM5c5smJnzzrd02gnOXsBj6G+BCWWVAZ9eTn++PzJvNxm5XwPQkBGrFhubnsb/O
+                K20poVNr5QKBgFQOBQcFfMvKQK3/Q1l63hdqC+rMHdlWWBqbTjiYUsWjeWAI1FtV
+                qEW3ppTRzKAiZtkqIXcTj9uucjrJsVSXWbIzA+K5r/SVojwmub16YcKF8VHHClhY
+                baXD1j6hXcS/Gjp2yhoJeiQXRf+Zo73kesPRtmL8mLZesK28V8r9GEYRAoGAbVR5
+                7bRqroNG1XDf68f4pzHyrOx6TT4fRMK/3eh9k3AtXxwRNqauqiYzBvqMYj1penWt
+                7q2wM/XiVXm4Sb9b/DjSCR6MWeQzDKx0qUsPQMbPRY3PdNYlvVucztbjPZyjRQA2
+                sZlM1Tms4gFRjbN9A0QLheCPhi5dUQBwhWzY2TUCgYEAjk+r91MHg4BJxfhqnQFE
+                gve2+733Q88eYdqMXOc+azWLl+77quW3Jukfvs0yX01o8t5SHDZtn3l4pdfOFiDO
+                IeFv0sgzvtwfuPnMTl/ferpKVYiSkECVjM9kw7UfcxFXs4LO48OYS4k+xtBlfN+V
+                PI6sEq8IU7mqeHLddOGJXuw=
                 -----END PRIVATE KEY-----
             services:
                 - name: api
@@ -162,8 +288,7 @@ realms:
                     image: "svr-api"
                     command:
                     env:
-                  provider:
-                      - urn:chip-in:end-point:hub.master.dev.example.com:api-server
+                  provider: urn:chip-in:end-point:hub.master.dev.example.com:api-server
                   consumers:
                       - urn:chip-in:end-point:hub.master.dev.example.com:api-gateway
                   singleton: false
@@ -176,8 +301,7 @@ realms:
                     image: "svr-auth"
                     command:
                     env:
-                  provider:
-                      - urn:chip-in:end-point:hub.master.dev.example.com:auth-server
+                  provider: urn:chip-in:end-point:hub.master.dev.example.com:auth-server
                   consumers:
                       - urn:chip-in:end-point:hub.master.dev.example.com:auth-gateway
                   singleton: false

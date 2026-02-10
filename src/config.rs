@@ -27,6 +27,7 @@
 ///   It adds new scopes and removes obsolete ones, but crucially, it does **not** touch
 ///   existing, unchanged scopes. This ensures that active user sessions within those
 ///   scopes are preserved across configuration reloads.
+///
 
 use tracing::info;
 use tracing::warn;
@@ -50,9 +51,11 @@ pub struct AppConfig {
 #[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct RealmConfig {
-    pub realm: String,
+    #[serde(rename = "name")]
+    pub realm_name: String,
+    #[serde(rename = "cacert")]
     pub realm_ca_cert: String,
-    pub hub: HubConfig,
+    pub hubs: Vec<HubConfig>,
 }
 
 /// Hub configuration mapping directly to config.yaml
@@ -63,6 +66,7 @@ pub struct HubConfig {
     pub title: String,
     pub description: String,
     pub fqdn: String,
+    pub server_address: String,
     pub server_port: u16,
     pub server_cert: String,
     pub server_cert_key: String,
@@ -91,34 +95,6 @@ pub struct AvailabilityManagementConfig {
     pub image: String,
     pub command: Option<String>,
     pub env: Option<HashMap<String, String>>,
-}
-
-/// Generates a service map (endpoint URN -> service name) from the application configuration.
-///
-/// This function creates a `HashMap` that is equivalent to the one manually created
-/// in `main.rs`, allowing the application to derive the service map directly from the
-/// configuration file.
-///
-/// # Arguments
-///
-/// * `config`: A reference to the `AppConfig`.
-///
-/// # Returns
-///
-/// A `HashMap<String, String>` where keys are endpoint URNs and values are service names.
-pub fn generate_service_map(config: &AppConfig) -> HashMap<String, String> {
-    let mut service_map = HashMap::new();
-    for realm in &config.realms {
-        for service in &realm.hub.services {
-            // Map the provider endpoint
-            service_map.insert(service.provider.clone(), service.name.clone());
-            // Map all consumer endpoints
-            for consumer_urn in &service.consumers {
-                service_map.insert(consumer_urn.clone(), service.name.clone());
-            }
-        }
-    }
-    service_map
 }
 
 /// Service that monitors configuration file changes and applies them
@@ -167,7 +143,7 @@ impl ConfigHotReloadService {
                             }
                         }
                         Err(e) => {
-                            warn!("Failed to parse reloaded configuration: {}", e);
+                            warn!("Failed to parse reloaded configuration '{}': {}", self.config_path, e);
                         }
                     }
                 }
@@ -181,7 +157,9 @@ impl ConfigHotReloadService {
 
 /// Loads the initial configuration
 pub fn load_initial_config(path: &str) -> Result<AppConfig, Box<dyn std::error::Error>> {
-    let content = fs::read_to_string(path)?;
-    let config = serde_yaml::from_str(&content)?;
+    let content = fs::read_to_string(path)
+        .map_err(|e| format!("Failed to read configuration file '{}': {}", path, e))?;
+    let config = serde_yaml::from_str(&content)
+        .map_err(|e| format!("Failed to parse configuration file '{}': {}", path, e))?;
     Ok(config)
 }

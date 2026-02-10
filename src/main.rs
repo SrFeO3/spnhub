@@ -11,22 +11,23 @@
 //   - FIXME01 on contol session closing behavior
 //   - Refactor utils.rs/create_quic_client_endpoint, which is currently marked as dead_code.
 
+use std::collections::HashMap;
+use std::sync::Arc;
+
+use arc_swap::ArcSwap;
 use chrono::{DateTime, Utc};
 use clap::Parser;
 use quinn::RecvStream;
 use rustls::crypto::ring::default_provider;
-use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::sync::Mutex;
-use tokio::sync::mpsc;
-use tokio::time;
-use tokio::time::Duration;
-use tokio::time::Instant;
-use tracing::Instrument;
-use tracing::{error, info, info_span, warn};
+use tokio::sync::{mpsc, Mutex};
+use tokio::time::{self, Duration, Instant};
+use tracing::{error, info, info_span, Instrument, warn};
 use tracing_subscriber::EnvFilter;
 
+mod config;
 mod utils;
+
+use crate::config::{load_initial_config, ConfigHotReloadService};
 
 const MAX_CONCURRENT_UNI_STREAMS: u8 = 0;
 const KEEP_ALIVE_INTERVAL_SECS: u64 = 50;
@@ -35,34 +36,14 @@ const MAX_IDLE_TIMEOUT_SECS: u64 = 60;
 #[derive(Parser)]
 struct Args {
     // command-line arguments or environment variables
-    #[arg(long, env = "SPNHUB_SERVER_ADDRESS", default_value = "0.0.0.0")]
-    fc_server_address: String,
-    #[arg(long, env = "SPNHUB_SERVER_PORT", default_value = "4433")]
-    fc_server_port: u16,
-    #[arg(
-        long,
-        env = "SPNHUB_INVENTORY_URL",
-        default_value = "192.168.10.130:2379"
-    )]
-    fc_inventory_url: String,
-    #[arg(
-        long,
-        env = "SPNHUB_SERVER_TRUST_CLIENT_CERTIFICATE_ROOT",
-        default_value = "../cert_client/ca.pem"
-    )]
-    fc_server_trust_client_cert_ca: String,
-    #[arg(
-        long,
-        env = "SPNHUB_SERVER_TLS_CERTIFICATE",
-        default_value = "../cert_server/server-spnhub.pem"
-    )]
-    fc_server_tls_cert: String,
-    #[arg(
-        long,
-        env = "SPNHUB_SERVER_TLS_CERTIFICATE_KEY",
-        default_value = "../cert_server/server-key-spnhub.pem"
-    )]
-    fc_server_tls_cert_key: String,
+    //#[arg(
+    //    long,
+    //    env = "SPNHUB_INVENTORY_URL",
+    //    default_value = "192.168.10.130:2379"
+    //)]
+    // spn_inventory_url: String,
+    #[arg(long, default_value = "conf/config.yaml")]
+    config: String,
 }
 
 #[tokio::main]
@@ -75,98 +56,86 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_current_span(false)
         .init();
 
-    info!("Server started (Event-Driven Architecture)");
+    info!("Server started");
 
     // arg
     let args = Args::parse();
-    let sc_server_address: &String = &args.fc_server_address;
-    let sc_server_port: &u16 = &args.fc_server_port;
-    let sc_inventory_url = &args.fc_inventory_url;
-    let sc_server_turst_client_cert_ca: &String = &args.fc_server_trust_client_cert_ca;
-    let sc_server_tls_cert: &String = &args.fc_server_tls_cert;
-    let sc_server_tls_cert_key: &String = &args.fc_server_tls_cert_key;
 
-    info!(
-        "Command-line arguments parsed: {},{},{},{},{},{}",
-        sc_server_address,
-        sc_server_port,
-        sc_inventory_url,
-        sc_server_turst_client_cert_ca,
-        sc_server_tls_cert,
-        sc_server_tls_cert_key
-    );
+    // Load initial config
+    let initial_config = load_initial_config(&args.config)?;
+    let shared_config = Arc::new(ArcSwap::from_pointee(initial_config.clone()));
+
+    // Start hot-reload service
+    let reload_service = ConfigHotReloadService::new(args.config.clone(), shared_config.clone());
+    tokio::spawn(async move {
+        reload_service.start().await;
+    });
 
     //  QUIC setup
     default_provider()
         .install_default()
         .expect("Failed to install crypto provider");
 
-    let (certs, key, truststore) = utils::load_certs_and_key(
-        sc_server_tls_cert,
-        sc_server_tls_cert_key,
-        sc_server_turst_client_cert_ca,
-    )?;
+    let config = shared_config.load();
+    let mut handles = Vec::new();
 
-    let endpoint = utils::create_quic_server_endpoint(
-        &sc_server_address,
-        *sc_server_port,
-        certs,
-        key,
-        truststore,
-        &[b"sc01-provider", b"sc01-consumer"],
-    )?;
+    for realm in &config.realms {
+        for hub in &realm.hubs {
+            info!("Starting hub: {} (Realm: {})", hub.name, realm.realm_name);
 
-    info!("Run server");
-    // Create a shared state for provider connections and consumer connections
-    let provider_connections: Arc<Mutex<HashMap<String, HashMap<String, quinn::Connection>>>> =
-        Arc::new(Mutex::new(HashMap::new()));
-    let consumer_connections: Arc<Mutex<HashMap<String, quinn::Connection>>> =
-        Arc::new(Mutex::new(HashMap::new()));
+            let (certs, key, truststore) = utils::load_certs_and_key_from_strings(
+                &hub.server_cert,
+                &hub.server_cert_key,
+                &realm.realm_ca_cert,
+            )?;
 
-    // Test endpoint-uri and service map
-    let mut service_map_data: HashMap<String, String> = HashMap::new();
-    service_map_data.insert(
-        "urn:chip-in:end-point:hub.master.TEST1ZONE:www-contents-server".to_string(),
-        "www".to_string(),
-    );
-    service_map_data.insert(
-        "urn:chip-in:end-point:hub.master.TEST1ZONE:www-gateway".to_string(),
-        "www".to_string(),
-    );
-    service_map_data.insert(
-        "urn:chip-in:end-point:hub.master.TEST1ZONE:database-server".to_string(),
-        "db".to_string(),
-    );
-    service_map_data.insert(
-        "urn:chip-in:end-point:hub.master.TEST1ZONE:database-client".to_string(),
-        "db".to_string(),
-    );
-    service_map_data.insert(
-        "urn:chip-in:end-point:hub.master.TEST1ZONE:api-server".to_string(),
-        "api".to_string(),
-    );
-    service_map_data.insert(
-        "urn:chip-in:end-point:hub.master.TEST1ZONE:api-gateway".to_string(),
-        "api".to_string(),
-    );
-    service_map_data.insert(
-        "urn:chip-in:end-point:hub.master.TEST1ZONE:auth-server".to_string(),
-        "auth".to_string(),
-    );
-    service_map_data.insert(
-        "urn:chip-in:end-point:hub.master.TEST1ZONE:auth-gateway".to_string(),
-        "auth".to_string(),
-    );
-    let service_map = Arc::new(service_map_data);
+            let endpoint = utils::create_quic_server_endpoint(
+                &hub.server_address,
+                hub.server_port,
+                certs,
+                key,
+                truststore,
+                &[b"sc01-provider", b"sc01-consumer"],
+            )?;
 
-    // Instantiate and run the server
-    let server = Server::new(
-        endpoint,
-        provider_connections,
-        consumer_connections,
-        service_map,
-    )?;
-    server.run().await;
+            // Create a shared state for provider connections and consumer connections
+            let provider_connections = Arc::new(Mutex::new(HashMap::new()));
+            let consumer_connections = Arc::new(Mutex::new(HashMap::new()));
+
+            let mut service_map = HashMap::new();
+            for service in &hub.services {
+                service_map.insert(service.provider.clone(), service.name.clone());
+                for consumer in &service.consumers {
+                    service_map.insert(consumer.clone(), service.name.clone());
+                }
+            }
+            info!("Service map for hub {}: {:?}", hub.name, service_map);
+            let service_map = Arc::new(service_map);
+
+            let server = Server::new(
+                endpoint,
+                provider_connections,
+                consumer_connections,
+                service_map,
+            )?;
+
+            let handle = tokio::spawn(async move {
+                server.run().await;
+            });
+            handles.push(handle);
+        }
+    }
+
+    info!("All hubs started. Waiting for connections...");
+
+    // Wait for Ctrl-C
+    tokio::signal::ctrl_c().await?;
+    info!("Ctrl-C received, shutting down...");
+
+    // Wait for all servers to finish
+    for handle in handles {
+        let _ = handle.await;
+    }
 
     Ok(())
 }

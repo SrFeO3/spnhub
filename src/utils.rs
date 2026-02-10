@@ -1,13 +1,14 @@
 use std::error::Error;
+use std::io::Cursor;
+use std::net::ToSocketAddrs;
 use std::sync::Arc;
+
 use quinn::crypto::rustls::QuicClientConfig;
 use quinn::crypto::rustls::QuicServerConfig;
-use tokio::time::Duration;
-use std::net::ToSocketAddrs;
-use tracing::{error, info};
-
-use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
+use rustls::pki_types::pem::PemObject;
+use tokio::time::Duration;
+use tracing::{error, info};
 use x509_parser::oid_registry::OID_X509_COMMON_NAME;
 use x509_parser::parse_x509_certificate;
 
@@ -38,6 +39,42 @@ pub fn load_certs_and_key(
 
     let mut truststore = quinn::rustls::RootCertStore::empty();
     for cert in CertificateDer::pem_file_iter(trust_ca_cert_path)? {
+        truststore.add(cert?)?;
+    }
+
+    Ok((certs, key, truststore))
+}
+
+/// Loads client certificates, a private key, and a trust store from PEM strings.
+///
+/// # Arguments
+///
+/// * `my_cert_pem`: Content of the my certificate PEM.
+/// * `my_key_pem`: Content of the my private key PEM.
+/// * `trust_ca_cert_pem`: Content of the trusted CA certificate(s) PEM.
+pub fn load_certs_and_key_from_strings(
+    my_cert_pem: &str,
+    my_key_pem: &str,
+    trust_ca_cert_pem: &str,
+) -> Result<
+    (
+        Vec<CertificateDer<'static>>,
+        PrivateKeyDer<'static>,
+        quinn::rustls::RootCertStore,
+    ),
+    Box<dyn Error>,
+> {
+    let mut reader = Cursor::new(my_cert_pem);
+    let certs = CertificateDer::pem_reader_iter(&mut reader)
+        .map(|cert_result| cert_result.map_err(|e| e.into()))
+        .collect::<Result<Vec<_>, Box<dyn Error>>>()?;
+
+    let mut reader = Cursor::new(my_key_pem);
+    let key = PrivateKeyDer::from_pem_reader(&mut reader)?;
+
+    let mut truststore = quinn::rustls::RootCertStore::empty();
+    let mut reader = Cursor::new(trust_ca_cert_pem);
+    for cert in CertificateDer::pem_reader_iter(&mut reader) {
         truststore.add(cert?)?;
     }
 
