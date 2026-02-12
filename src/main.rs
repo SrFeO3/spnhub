@@ -563,45 +563,45 @@ impl ConsumerHandler {
     /// Finds a provider with the same service and sets it as the target,
     /// retrying periodically until one is found or a timeout is reached.
     async fn find_and_set_target_provider(&mut self, interval: Duration, timeout: Duration) {
-        let start_time = Instant::now();
-        info!(
-            "Searching for provider for service '{}' (timeout: {:?}, interval: {:?})",
-            self.context.service, timeout, interval
-        );
+            let start_time = Instant::now();
+            info!(
+                "Searching for provider for service '{}' (timeout: {:?}, interval: {:?})",
+                self.context.service, timeout, interval
+            );
 
-        loop {
-            // --- Lock Scope Start ---
-            {
-                let providers_by_service = self.provider_connections.lock().await;
-                if let Some(providers_for_service) = providers_by_service.get(&self.context.service)
-                {
-                    // For simplicity, take the first available provider for this service.
-                    if let Some((provider_cn, provider_conn)) = providers_for_service.iter().next()
-                    {
-                        info!(
-                            "Found matching provider '{}' for service '{}'. Storing for later use.",
-                            provider_cn, self.context.service
-                        );
-                        self.target_provider = Some(provider_conn.clone());
-                        return; // Found it, exit the function.
-                    }
+            loop {
+                // --- Lock Scope Start ---
+                let found_provider = {
+                    let providers_by_service = self.provider_connections.lock().await;
+                    providers_by_service
+                        .get(&self.context.service)
+                        .and_then(|providers| providers.iter().next())
+                        .map(|(cn, conn)| (cn.clone(), conn.clone()))
+                }; // --- Lock Scope End ---
+
+                if let Some((provider_cn, provider_conn)) = found_provider {
+                    info!(
+                        "Found matching provider '{}' for service '{}'. Storing for later use.",
+                        provider_cn, self.context.service
+                    );
+                    self.target_provider = Some(provider_conn);
+                    return; // Found it, exit the function.
                 }
-            } // --- Lock Scope End ---
 
-            // Check for timeout
-            if start_time.elapsed() >= timeout {
-                warn!(
-                    "Timed out waiting for a provider for service '{}' after {:?}",
-                    self.context.service,
-                    start_time.elapsed()
-                );
-                break; // Timeout reached, exit the loop.
+                // Check for timeout
+                if start_time.elapsed() >= timeout {
+                    warn!(
+                        "Timed out waiting for a provider for service '{}' after {:?}",
+                        self.context.service,
+                        start_time.elapsed()
+                    );
+                    break; // Timeout reached, exit the loop.
+                }
+
+                // Wait for the next interval
+                time::sleep(interval).await;
             }
-
-            // Wait for the next interval
-            time::sleep(interval).await;
         }
-    }
 
     /// Manages the proxying of all streams for a single, established provider connection.
     ///
