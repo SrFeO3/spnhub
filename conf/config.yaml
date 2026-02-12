@@ -112,7 +112,7 @@ realms:
                   availabilityManagement:
                     ondemandStart: true
                     idleTimeout: 0  # no shutdown
-                    image: "svr-api"
+                    image: "provider-api"
                     command:
                     env:
                   provider: urn:chip-in:end-point:hub.master.sr.example.com:api-server
@@ -125,7 +125,7 @@ realms:
                   availabilityManagement:
                     ondemandStart: true
                     idleTimeout: 0  # no shutdown
-                    image: "svr-auth"
+                    image: "provider-auth"
                     command:
                     env:
                   provider: urn:chip-in:end-point:hub.master.sr.example.com:auth-server
@@ -138,7 +138,7 @@ realms:
                   availabilityManagement:
                     ondemandStart: true
                     idleTimeout: 0  # no shutdown
-                    image: "svr-db"
+                    image: "provider-db"
                     command:
                     env:
                   provider: urn:chip-in:end-point:hub.master.sr.example.com:database-server
@@ -151,7 +151,7 @@ realms:
                   availabilityManagement:
                     ondemandStart: true
                     idleTimeout: 0  # no shutdown
-                    image: "svr-www"
+                    image: "provider-www"
                     command:
                     env:
                   provider: urn:chip-in:end-point:hub.master.sr.example.com:www-server
