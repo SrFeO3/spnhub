@@ -51,7 +51,7 @@ realms:
             description: SpnHub instance for the production environment.
             fqdn: spnhub.sr.example.com
             serverAddress: "0.0.0.0"
-            serverPort: 8443
+            serverPort: 4433
             serverCert: |
                 -----BEGIN CERTIFICATE-----
                 MIIDwTCCAqmgAwIBAgIUCA/6r1GSV9cc5djXCRP0Q7yy9aEwDQYJKoZIhvcNAQEL
