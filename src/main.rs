@@ -142,9 +142,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 /// Manages the overall lifecycle of the server.
 struct Server {
+    /// The QUIC endpoint for the server.
     endpoint: quinn::Endpoint,
+    /// A map storing provider connections.
+    /// Key: Service name -> Inner Key: Provider URI (CN) -> Value: QUIC connection.
     provider_connections: Arc<Mutex<HashMap<String, HashMap<String, quinn::Connection>>>>,
+    /// A map storing consumer connections.
+    /// Key: Consumer URI (CN) -> Value: QUIC connection.
     consumer_connections: Arc<Mutex<HashMap<String, quinn::Connection>>>,
+    /// A map for looking up the service name associated with a given URI (CN).
     service_map: Arc<HashMap<String, String>>,
 }
 
@@ -172,15 +178,42 @@ impl Server {
         // Spawn a background task for periodic statistics logging.
         let providers = self.provider_connections.clone();
         let consumers = self.consumer_connections.clone();
+        let service_map = self.service_map.clone();
         tokio::spawn(async move {
             let mut interval = time::interval(Duration::from_secs(10));
+            // Prevent tick buildup if processing lags
+            interval.set_missed_tick_behavior(time::MissedTickBehavior::Skip);
+
             loop {
                 interval.tick().await;
-                let providers_lock = providers.lock().await;
-                let consumers_lock = consumers.lock().await;
 
-                let provider_count: usize = providers_lock.values().map(|v| v.len()).sum();
-                let consumer_count = consumers_lock.len();
+                // 1. Create snapshots to minimize lock duration
+                let (provider_snapshot, consumer_snapshot, provider_count, consumer_count) = {
+                    let providers_lock = providers.lock().await;
+                    let consumers_lock = consumers.lock().await;
+
+                    let provider_count: usize = providers_lock.values().map(|v| v.len()).sum();
+                    let consumer_count = consumers_lock.len();
+
+                    let provider_snapshot: Vec<_> = providers_lock
+                        .iter()
+                        .flat_map(|(service, map)| {
+                            map.iter().map(|(cn, conn)| (service.clone(), cn.clone(), conn.clone()))
+                        })
+                        .collect();
+
+                    let consumer_snapshot: Vec<_> = consumers_lock
+                        .iter()
+                        .map(|(uri, conn)| (uri.clone(), conn.clone()))
+                        .collect();
+
+                    (
+                        provider_snapshot,
+                        consumer_snapshot,
+                        provider_count,
+                        consumer_count,
+                    )
+                }; // Locks are released here
 
                 // Get tokio thread info (requires `tokio_unstable` feature).
                 let tokio_workers = tokio::runtime::Handle::current().metrics().num_workers();
@@ -197,8 +230,8 @@ impl Server {
                     consumer_connections = consumer_count,
                 );
 
-                for (service, conns) in providers_lock.iter() {
-                    for (cn, conn) in conns.iter() {
+                // 2. Log stats outside the lock
+                for (service, cn, conn) in provider_snapshot {
                         let stats = conn.stats();
                         info!(
                             type = "provider",
@@ -209,13 +242,14 @@ impl Server {
                             lost_packets = stats.path.lost_packets,
                             " - Provider connection stats"
                         );
-                    }
                 }
 
-                for (uri, conn) in consumers_lock.iter() {
+                for (uri, conn) in consumer_snapshot {
                     let stats = conn.stats();
+                    let service = service_map.get(&uri).map(|s| s.as_str()).unwrap_or("unknown");
                     info!(
                         type = "consumer",
+                        service,
                         uri,
                         id = conn.stable_id(),
                         rtt_ms = stats.path.rtt.as_millis(),
