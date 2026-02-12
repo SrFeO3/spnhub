@@ -154,7 +154,7 @@ realms:
                     image: "svr-www"
                     command:
                     env:
-                  provider: urn:chip-in:end-point:hub.master.sr.example.com:www-contents-server
+                  provider: urn:chip-in:end-point:hub.master.sr.example.com:www-server
                   consumers:
                       - urn:chip-in:end-point:hub.master.sr.example.com:www-gateway
                   singleton: false
