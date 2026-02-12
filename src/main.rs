@@ -26,8 +26,10 @@ use tracing_subscriber::EnvFilter;
 
 mod config;
 mod utils;
+mod microservice;
 
 use crate::config::{load_initial_config, ConfigHotReloadService};
+use crate::microservice::start_provider_by_urn;
 
 const MAX_CONCURRENT_UNI_STREAMS: u8 = 0;
 const KEEP_ALIVE_INTERVAL_SECS: u64 = 50;
@@ -117,6 +119,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 provider_connections,
                 consumer_connections,
                 service_map,
+                shared_config.clone(),
             )?;
 
             let handle = tokio::spawn(async move {
@@ -152,6 +155,8 @@ struct Server {
     consumer_connections: Arc<Mutex<HashMap<String, quinn::Connection>>>,
     /// A map for looking up the service name associated with a given URI (CN).
     service_map: Arc<HashMap<String, String>>,
+    /// Shared application configuration for on-demand start.
+    shared_config: Arc<ArcSwap<crate::config::AppConfig>>,
 }
 
 impl Server {
@@ -161,6 +166,7 @@ impl Server {
         provider_connections: Arc<Mutex<HashMap<String, HashMap<String, quinn::Connection>>>>,
         consumer_connections: Arc<Mutex<HashMap<String, quinn::Connection>>>,
         service_map: Arc<HashMap<String, String>>,
+        shared_config: Arc<ArcSwap<crate::config::AppConfig>>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         info!("Listening on {}", endpoint.local_addr()?);
         Ok(Self {
@@ -168,6 +174,7 @@ impl Server {
             provider_connections,
             consumer_connections,
             service_map,
+            shared_config,
         })
     }
 
@@ -268,6 +275,7 @@ impl Server {
                     let provider_connections = self.provider_connections.clone();
                     let consumer_connections = self.consumer_connections.clone();
                     let service_map = self.service_map.clone();
+                    let shared_config = self.shared_config.clone();
                     // Spawn an asynchronous task for each new connection.
                     tokio::spawn(async move {
                         match connecting.await {
@@ -318,6 +326,7 @@ impl Server {
                                                 provider_connections,
                                                 consumer_connections,
                                                 service_map,
+                                                shared_config,
                                             ).run()
                                                 .instrument(info_span!("consumer_handler", id = connection_id))
                                                 .await
@@ -509,6 +518,8 @@ struct ConsumerHandler {
     target_provider: Option<quinn::Connection>,
     provider_connections: Arc<Mutex<HashMap<String, HashMap<String, quinn::Connection>>>>,
     consumer_connections: Arc<Mutex<HashMap<String, quinn::Connection>>>,
+    /// Shared application configuration.
+    shared_config: Arc<ArcSwap<crate::config::AppConfig>>,
 }
 
 /// The outcome of the stream proxying loop, indicating why it terminated.
@@ -527,6 +538,7 @@ impl ConsumerHandler {
         provider_connections: Arc<Mutex<HashMap<String, HashMap<String, quinn::Connection>>>>,
         consumer_connections: Arc<Mutex<HashMap<String, quinn::Connection>>>,
         service_map: Arc<HashMap<String, String>>,
+        shared_config: Arc<ArcSwap<crate::config::AppConfig>>,
     ) -> Self {
         let now = Utc::now();
         let conn_id = connection.stable_id();
@@ -557,6 +569,7 @@ impl ConsumerHandler {
             target_provider: None,
             provider_connections,
             consumer_connections,
+            shared_config,
         }
     }
 
@@ -568,6 +581,7 @@ impl ConsumerHandler {
                 "Searching for provider for service '{}' (timeout: {:?}, interval: {:?})",
                 self.context.service, timeout, interval
             );
+            let mut start_attempted = false;
 
             loop {
                 // --- Lock Scope Start ---
@@ -586,6 +600,22 @@ impl ConsumerHandler {
                     );
                     self.target_provider = Some(provider_conn);
                     return; // Found it, exit the function.
+                }
+
+                if !start_attempted {
+                    start_attempted = true;
+                    let config = self.shared_config.load();
+                    let provider_urn = config.realms.iter()
+                        .flat_map(|r| &r.hubs)
+                        .flat_map(|h| &h.services)
+                        .find(|s| s.name == self.context.service)
+                        .map(|s| s.provider.clone());
+
+                    if let Some(urn) = provider_urn {
+                        if let Err(e) = start_provider_by_urn(&config, &urn).await {
+                            warn!("Failed to attempt on-demand start for service '{}' (URN: {}): {}", self.context.service, urn, e);
+                        }
+                    }
                 }
 
                 // Check for timeout

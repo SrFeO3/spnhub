@@ -1,4 +1,4 @@
-//! microservice_manager.rs
+//! microservice.rs
 ////! Control-plane module responsible for the lifecycle of services:
 //! - spawn (start)
 //! - monitor health (watch)
@@ -25,6 +25,8 @@ use bollard::Docker;
 use bollard::models::{ContainerCreateBody, HostConfig};
 use bollard::query_parameters::{CreateContainerOptions, StartContainerOptions};
 use bollard::errors::Error;
+
+use crate::config::AppConfig;
 
 #[derive(Debug)]
 pub struct ContainerHandle {
@@ -60,7 +62,9 @@ impl From<Error> for StartError {
 /// - `image`: Docker image tag/name (e.g., `"nginx:1.25"`).
 /// - `options`: Not raw options passed to `docker run`
 pub async fn start_container(image: &str, _options: &str) -> Result<ContainerHandle, StartError> {
-    let docker = Docker::connect_with_local_defaults()?;
+    tracing::info!("Starting container for image: {}...", image);
+
+    let docker = Docker::connect_with_unix_defaults()?;
 
     // Generate a dedicated container name (e.g., "nginx:latest" -> "spn_nginx_latest")
     let container_name = format!("spn_{}", image.replace(|c: char| !c.is_alphanumeric(), "_"));
@@ -85,25 +89,62 @@ pub async fn start_container(image: &str, _options: &str) -> Result<ContainerHan
     };
 
 
-    println!("Creating/Checking container: {}...", container_name);
+    tracing::info!("Creating/Checking container: {}...", container_name);
     let id = match docker.create_container(Some(create_options), config).await {
         Ok(container) => container.id,
         Err(Error::DockerResponseServerError { status_code: 409, .. }) => {
             // 409 Conflict: Container already exists.
             // We need to get the ID of the existing container.
+            tracing::info!("Container {} already exists.", container_name);
             let inspect = docker.inspect_container(&container_name, None).await?;
             inspect.id.ok_or_else(|| StartError::Other("Container exists but has no ID".to_string()))?
         }
-        Err(e) => return Err(e.into()),
+        Err(e) => {
+            tracing::error!("Failed to create container {}: {}", container_name, e);
+            return Err(e.into());
+        }
     };
 
     // 4. Start
     if let Err(e) = docker.start_container(&container_name, None::<StartContainerOptions>).await {
         // 304 Not Modified: Container already started.
         if !matches!(e, Error::DockerResponseServerError { status_code: 304, .. }) {
+            tracing::error!("Failed to start container {}: {}", container_name, e);
             return Err(e.into());
         }
+        tracing::info!("Container {} is already started.", container_name);
+    } else {
+        tracing::info!("Container {} started successfully.", container_name);
     }
 
     Ok(ContainerHandle { id })
+}
+
+/// Starts a container corresponding to the given provider URN.
+///
+/// This function looks up the container image associated with the provided URN
+/// in the application configuration and starts it.
+pub async fn start_provider_by_urn(
+    config: &AppConfig,
+    urn: &str,
+) -> Result<ContainerHandle, StartError> {
+    let target_service = config
+        .realms
+        .iter()
+        .flat_map(|r| &r.hubs)
+        .flat_map(|h| &h.services)
+        .find(|s| s.provider == urn);
+
+    match target_service {
+        Some(service) => {
+            if service.availability_management.ondemand_start {
+                tracing::info!("Starting container for provider: {} (image: {})", urn, service.availability_management.image);
+                start_container(&service.availability_management.image, "").await
+            } else {
+                tracing::info!("On-demand start is disabled for provider: {}", urn);
+                Ok(ContainerHandle { id: "ondemand-disabled".to_string() })
+            }
+        }
+        None => Err(StartError::Other(format!("Provider URN not found: {}", urn))),
+    }
 }
