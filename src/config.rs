@@ -1,3 +1,11 @@
+use arc_swap::ArcSwap;
+use serde::Deserialize;
+use std::collections::HashMap;
+use std::fs;
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use tokio::time;
+use tokio::time::Duration;
 /// # Configuration Management
 ///
 /// This module is responsible for defining, loading, and managing the application's
@@ -28,17 +36,8 @@
 ///   existing, unchanged scopes. This ensures that active user sessions within those
 ///   scopes are preserved across configuration reloads.
 ///
-
 use tracing::info;
 use tracing::warn;
-use serde::Deserialize;
-use std::collections::HashMap;
-use std::fs;
-use std::sync::Arc;
-use arc_swap::ArcSwap;
-use tokio::sync::Mutex;
-use tokio::time;
-use tokio::time::Duration;
 
 /// Application-wide configuration structure
 #[derive(Debug, Deserialize, Clone)]
@@ -145,13 +144,19 @@ impl ConfigHotReloadService {
                             }
                         }
                         Err(e) => {
-                            warn!("Failed to parse reloaded configuration '{}': {}", self.config_path, e);
+                            warn!(
+                                "Failed to parse reloaded configuration '{}': {}",
+                                self.config_path, e
+                            );
                         }
                     }
                 }
             }
             Err(e) => {
-                warn!("Failed to read configuration file '{}': {}", self.config_path, e);
+                warn!(
+                    "Failed to read configuration file '{}': {}",
+                    self.config_path, e
+                );
             }
         }
     }

@@ -24,9 +24,9 @@
 use std::collections::HashMap;
 
 use bollard::Docker;
+use bollard::errors::Error;
 use bollard::models::{ContainerCreateBody, HostConfig, PortBinding};
 use bollard::query_parameters::{CreateContainerOptions, StartContainerOptions};
-use bollard::errors::Error;
 
 use crate::config::AvailabilityManagementConfig;
 
@@ -91,7 +91,11 @@ async fn start_container(
     options: &str,
     env: Option<&HashMap<String, String>>,
 ) -> Result<ContainerHandle, StartError> {
-    tracing::info!("Starting container for image: {} with options: {}", image, options);
+    tracing::info!(
+        "Starting container for image: {} with options: {}",
+        image,
+        options
+    );
 
     let docker = Docker::connect_with_local_defaults()?;
 
@@ -182,30 +186,44 @@ async fn start_container(
         ..Default::default()
     };
 
-
     tracing::info!("Creating/Checking container: {}...", container_name);
     let id = match docker.create_container(Some(create_options), config).await {
         Ok(container) => container.id,
-        Err(Error::DockerResponseServerError { status_code: 409, .. }) => {
+        Err(Error::DockerResponseServerError {
+            status_code: 409, ..
+        }) => {
             // 409 Conflict: Container already exists.
             // We need to get the ID of the existing container.
             tracing::info!("Container {} already exists.", container_name);
             let inspect = docker.inspect_container(&container_name, None).await?;
-            inspect.id.ok_or_else(|| StartError::Other("Container exists but has no ID".to_string()))?
+            inspect
+                .id
+                .ok_or_else(|| StartError::Other("Container exists but has no ID".to_string()))?
         }
         Err(e) => {
             tracing::error!("Failed to create container {}: {}", container_name, e);
             if e.to_string().contains("Connect") || e.to_string().contains("Permission denied") {
-                tracing::error!("Check permissions for /var/run/docker.sock. If running as non-root (appuser), ensure the user has access to the Docker socket.");
+                tracing::error!(
+                    "Check permissions for /var/run/docker.sock. If running as non-root (appuser), ensure the user has access to the Docker socket."
+                );
             }
             return Err(e.into());
         }
     };
 
     // 4. Start
-    if let Err(e) = docker.start_container(&container_name, None::<StartContainerOptions>).await {
+    if let Err(e) = docker
+        .start_container(&container_name, None::<StartContainerOptions>)
+        .await
+    {
         // 304 Not Modified: Container already started.
-        if !matches!(e, Error::DockerResponseServerError { status_code: 304, .. }) {
+        if !matches!(
+            e,
+            Error::DockerResponseServerError {
+                status_code: 304,
+                ..
+            }
+        ) {
             tracing::error!("Failed to start container {}: {}", container_name, e);
             return Err(e.into());
         }

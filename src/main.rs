@@ -19,20 +19,21 @@ use chrono::{DateTime, Utc};
 use clap::Parser;
 use quinn::RecvStream;
 use rustls::crypto::ring::default_provider;
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{Mutex, mpsc};
 use tokio::time::{self, Duration, Instant};
-use tracing::{error, info, info_span, Instrument, warn};
+use tracing::{Instrument, error, info, info_span, warn};
 use tracing_subscriber::EnvFilter;
 
 mod config;
-mod utils;
 mod microservice;
+mod utils;
 
-use crate::config::{load_initial_config, ConfigHotReloadService};
+use crate::config::{ConfigHotReloadService, load_initial_config};
 
 const MAX_CONCURRENT_UNI_STREAMS: u8 = 0;
 const KEEP_ALIVE_INTERVAL_SECS: u64 = 50;
 const MAX_IDLE_TIMEOUT_SECS: u64 = 60;
+const DATAGRAM_RECEIVE_BUFFER_SIZE: usize = 1024 * 1024;
 
 #[derive(Parser)]
 struct Args {
@@ -204,7 +205,8 @@ impl Server {
                     let provider_snapshot: Vec<_> = providers_lock
                         .iter()
                         .flat_map(|(service, map)| {
-                            map.iter().map(|(cn, conn)| (service.clone(), cn.clone(), conn.clone()))
+                            map.iter()
+                                .map(|(cn, conn)| (service.clone(), cn.clone(), conn.clone()))
                         })
                         .collect();
 
@@ -238,21 +240,24 @@ impl Server {
 
                 // 2. Log stats outside the lock
                 for (service, cn, conn) in provider_snapshot {
-                        let stats = conn.stats();
-                        info!(
-                            type = "provider",
-                            service,
-                            cn,
-                            id = conn.stable_id(),
-                            rtt_ms = stats.path.rtt.as_millis(),
-                            lost_packets = stats.path.lost_packets,
-                            " - Provider connection stats"
-                        );
+                    let stats = conn.stats();
+                    info!(
+                        type = "provider",
+                        service,
+                        cn,
+                        id = conn.stable_id(),
+                        rtt_ms = stats.path.rtt.as_millis(),
+                        lost_packets = stats.path.lost_packets,
+                        " - Provider connection stats"
+                    );
                 }
 
                 for (uri, conn) in consumer_snapshot {
                     let stats = conn.stats();
-                    let service = service_map.get(&uri).map(|s| s.as_str()).unwrap_or("unknown");
+                    let service = service_map
+                        .get(&uri)
+                        .map(|s| s.as_str())
+                        .unwrap_or("unknown");
                     info!(
                         type = "consumer",
                         service,
@@ -570,13 +575,18 @@ impl ConsumerHandler {
 
         // Extract configuration needed for consumer handling
         let config = shared_config.load();
-        let service_config = config.realms.iter()
+        let service_config = config
+            .realms
+            .iter()
             .flat_map(|r| &r.hubs)
             .flat_map(|h| &h.services)
             .find(|s| s.name == service);
 
         let (provider_urn, availability_config) = match service_config {
-            Some(s) => (Some(s.provider.clone()), Some(s.availability_management.clone())),
+            Some(s) => (
+                Some(s.provider.clone()),
+                Some(s.availability_management.clone()),
+            ),
             None => (None, None),
         };
 
@@ -591,82 +601,96 @@ impl ConsumerHandler {
         }
     }
 
-    /// Attempts to start the provider for the current service on-demand.
-    fn try_start_provider(&self, on_payload: bool) {
-        if let (Some(urn), Some(am_config)) = (&self.provider_urn, &self.availability_config) {
-            let urn = urn.clone();
-            let am_config = am_config.clone();
-            let service = self.context.service.clone();
+    /// Executes the on-demand start
+    async fn execute_ondemand_start(
+        urn: &str,
+        am_config: &crate::config::AvailabilityManagementConfig,
+        service_name: &str,
+        trigger: &str,
+    ) {
+        let should_start = match trigger {
+            "consumer" => am_config.ondemand_start_on_consumer,
+            "payload" => am_config.ondemand_start_on_payload,
+            _ => false,
+        };
 
-            tokio::spawn(async move {
-                let trigger = if on_payload { "payload" } else { "consumer" };
-                let should_start = if on_payload {
-                    am_config.ondemand_start_on_payload
-                } else {
-                    am_config.ondemand_start_on_consumer
-                };
-
-                if should_start {
-                    info!("Starting container for provider (trigger: {}): {} (image: {})", trigger, urn, am_config.image);
-                    if let Err(e) = crate::microservice::start_provider(&am_config).await {
-                        warn!("Failed to attempt on-demand start for service '{}' (URN: {}): {}", service, urn, e);
-                    }
-                } else {
-                    info!("On-demand start ({}) is disabled for provider: {}", trigger, urn);
-                }
-            });
+        if should_start {
+            info!(
+                "Starting container for provider (trigger: {}): {} (image: {})",
+                trigger, urn, am_config.image
+            );
+            if let Err(e) = crate::microservice::start_provider(am_config).await {
+                warn!(
+                    "Failed to attempt on-demand start for service '{}' (URN: {}): {}",
+                    service_name, urn, e
+                );
+            }
+        } else {
+            info!(
+                "On-demand start ({}) is disabled for provider: {}",
+                trigger, urn
+            );
         }
     }
 
     /// Finds a provider with the same service and sets it as the target,
     /// retrying periodically until one is found or a timeout is reached.
     async fn find_and_set_target_provider(&mut self, interval: Duration, timeout: Duration) {
-            let start_time = Instant::now();
-            info!(
-                "Searching for provider for service '{}' (timeout: {:?}, interval: {:?})",
-                self.context.service, timeout, interval
-            );
-            let mut start_attempted = false;
+        let start_time = Instant::now();
+        info!(
+            "Searching for provider for service '{}' (timeout: {:?}, interval: {:?})",
+            self.context.service, timeout, interval
+        );
+        let mut start_attempted = false;
 
-            loop {
-                // --- Lock Scope Start ---
-                let found_provider = {
-                    let providers_by_service = self.provider_connections.lock().await;
-                    providers_by_service
-                        .get(&self.context.service)
-                        .and_then(|providers| providers.iter().next())
-                        .map(|(cn, conn)| (cn.clone(), conn.clone()))
-                }; // --- Lock Scope End ---
+        loop {
+            // --- Lock Scope Start ---
+            let found_provider = {
+                let providers_by_service = self.provider_connections.lock().await;
+                providers_by_service
+                    .get(&self.context.service)
+                    .and_then(|providers| providers.iter().next())
+                    .map(|(cn, conn)| (cn.clone(), conn.clone()))
+            }; // --- Lock Scope End ---
 
-                if let Some((provider_cn, provider_conn)) = found_provider {
-                    info!(
-                        "Found matching provider '{}' for service '{}'. Storing for later use.",
-                        provider_cn, self.context.service
-                    );
-                    self.target_provider = Some(provider_conn);
-                    return; // Found it, exit the function.
-                }
-
-                // Attempt on-demand provider start on first consumer connected
-                if !start_attempted {
-                    start_attempted = true;
-                    self.try_start_provider(false);
-                }
-
-                // Check for timeout
-                if start_time.elapsed() >= timeout {
-                    warn!(
-                        "Timed out waiting for a provider for service '{}' after {:?}",
-                        self.context.service,
-                        start_time.elapsed()
-                    );
-                    break; // Timeout reached, exit the loop.
-                }
-
-                // Wait for the next interval
-                time::sleep(interval).await;
+            if let Some((provider_cn, provider_conn)) = found_provider {
+                info!(
+                    "Found matching provider '{}' for service '{}'. Storing for later use.",
+                    provider_cn, self.context.service
+                );
+                self.target_provider = Some(provider_conn);
+                return; // Found it, exit the function.
             }
+
+            // Attempt on-demand provider start on first consumer connected
+            if !start_attempted {
+                start_attempted = true;
+                if let (Some(urn), Some(am_config)) =
+                    (&self.provider_urn, &self.availability_config)
+                {
+                    let urn = urn.clone();
+                    let am_config = am_config.clone();
+                    let service = self.context.service.clone();
+                    tokio::spawn(async move {
+                        Self::execute_ondemand_start(&urn, &am_config, &service, "consumer").await;
+                    });
+                }
+            }
+
+            // Check for timeout
+            if start_time.elapsed() >= timeout {
+                warn!(
+                    "Timed out waiting for a provider for service '{}' after {:?}",
+                    self.context.service,
+                    start_time.elapsed()
+                );
+                break; // Timeout reached, exit the loop.
+            }
+
+            // Wait for the next interval
+            time::sleep(interval).await;
         }
+    }
 
     /// Manages the proxying of all streams for a single, established provider connection.
     ///
@@ -726,7 +750,6 @@ impl ConsumerHandler {
                             if !self.first_stream_accepted {
                                 info!("First stream accepted from consumer '{}'", self.context.uri);
                                 self.first_stream_accepted = true;
-                                self.try_start_provider(true);
                             }
                             info!("Bidirectional stream accepted from consumer '{}'", self.context.uri);
                             let consumer_context = self.context.clone();
@@ -788,6 +811,51 @@ impl ConsumerHandler {
             self.context.uri, self.context.service
         );
 
+        // Start a background task to listen for a single control datagram
+        // and trigger on-demand provider start if configured.
+        let datagram_conn = self.context.connection.clone();
+        let provider_urn = self.provider_urn.clone();
+        let availability_config = self.availability_config.clone();
+        let service_name = self.context.service.clone();
+        let consumer_uri = self.context.uri.clone();
+
+        tokio::spawn(async move {
+            // Wait for datagrams (signals) from the consumer in a loop
+            while let Ok(bytes) = datagram_conn.read_datagram().await {
+                let message = String::from_utf8_lossy(&bytes);
+                info!(
+                    "Received control datagram from consumer '{}': {:?}",
+                    consumer_uri, message
+                );
+
+                match message.trim() {
+                    "start_provider" => {
+                        if let (Some(urn), Some(am_config)) = (&provider_urn, &availability_config)
+                        {
+                            let urn = urn.clone();
+                            let am_config = am_config.clone();
+                            let service_name = service_name.clone();
+                            tokio::spawn(async move {
+                                Self::execute_ondemand_start(
+                                    &urn,
+                                    &am_config,
+                                    &service_name,
+                                    "payload",
+                                )
+                                .await;
+                            });
+                        }
+                    }
+                    _ => {
+                        warn!(
+                            "Unknown control message from consumer '{}': {}",
+                            consumer_uri, message
+                        );
+                    }
+                }
+            }
+        });
+
         // Add the connection to the shared map.
         {
             let mut consumers = self.consumer_connections.lock().await;
@@ -802,7 +870,7 @@ impl ConsumerHandler {
         let reason = 'main_loop: loop {
             // 1. Find a provider.
             let search_interval = Duration::from_secs(1);
-            let search_timeout = Duration::from_secs(10);
+            let search_timeout = Duration::from_secs(600);
             self.find_and_set_target_provider(search_interval, search_timeout)
                 .await;
 

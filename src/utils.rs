@@ -4,8 +4,8 @@ use std::net::ToSocketAddrs;
 use std::sync::Arc;
 
 use quinn::crypto::rustls::QuicServerConfig;
-use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use rustls::pki_types::pem::PemObject;
+use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use tokio::time::Duration;
 use tracing::{error, info};
 use x509_parser::oid_registry::OID_X509_COMMON_NAME;
@@ -95,6 +95,7 @@ pub fn create_quic_server_endpoint(
         .unwrap()
         .max_concurrent_uni_streams(crate::MAX_CONCURRENT_UNI_STREAMS.into())
         .keep_alive_interval(Some(Duration::from_secs(crate::KEEP_ALIVE_INTERVAL_SECS)))
+        .datagram_receive_buffer_size(Some(crate::DATAGRAM_RECEIVE_BUFFER_SIZE))
         .max_idle_timeout(Some(
             Duration::from_secs(crate::MAX_IDLE_TIMEOUT_SECS).try_into()?,
         ));
