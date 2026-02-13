@@ -63,9 +63,9 @@ pub struct RealmConfig {
 #[serde(rename_all = "camelCase")]
 pub struct HubConfig {
     pub name: String,
-    pub title: String,
-    pub description: String,
-    pub fqdn: String,
+    pub _title: String,
+    pub _description: String,
+    pub _fqdn: String,
     pub server_address: String,
     pub server_port: u16,
     pub server_cert: String,
@@ -78,12 +78,12 @@ pub struct HubConfig {
 #[serde(rename_all = "camelCase")]
 pub struct ServiceConfig {
     pub name: String,
-    pub title: String,
-    pub description: String,
+    pub _title: String,
+    pub _description: String,
     pub availability_management: AvailabilityManagementConfig,
     pub provider: String,
     pub consumers: Vec<String>,
-    pub singleton: bool,
+    pub _singleton: bool,
 }
 
 /// Availability management configuration for a service
@@ -92,9 +92,9 @@ pub struct ServiceConfig {
 pub struct AvailabilityManagementConfig {
     pub ondemand_start_on_consumer: bool,
     pub ondemand_start_on_payload: bool,
-    pub idle_timeout: u64,
+    pub _idle_timeout: u64,
     pub image: String,
-    pub command: Option<String>,
+    pub _command: Option<String>,
     pub env: Option<HashMap<String, String>>,
     pub options: Option<String>,
 }

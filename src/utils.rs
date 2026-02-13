@@ -3,7 +3,6 @@ use std::io::Cursor;
 use std::net::ToSocketAddrs;
 use std::sync::Arc;
 
-use quinn::crypto::rustls::QuicClientConfig;
 use quinn::crypto::rustls::QuicServerConfig;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use rustls::pki_types::pem::PemObject;
@@ -11,39 +10,6 @@ use tokio::time::Duration;
 use tracing::{error, info};
 use x509_parser::oid_registry::OID_X509_COMMON_NAME;
 use x509_parser::parse_x509_certificate;
-
-/// Loads client certificates, a private key, and a trust store from PEM files.
-///
-/// # Arguments
-///
-/// * `my_cert_path`: Path to the my certificate PEM file.
-/// * `my_key_path`: Path to the my private key PEM file.
-/// * `trust_ca_cert_path`: Path to the trusted CA certificate(s) PEM file.
-pub fn load_certs_and_key(
-    my_cert_path: &str,
-    my_key_path: &str,
-    trust_ca_cert_path: &str,
-) -> Result<
-    (
-        Vec<CertificateDer<'static>>,
-        PrivateKeyDer<'static>,
-        quinn::rustls::RootCertStore,
-    ),
-    Box<dyn Error>,
-> {
-    let certs = CertificateDer::pem_file_iter(my_cert_path)?
-        .map(|cert_result| cert_result.map_err(|e| e.into()))
-        .collect::<Result<Vec<_>, Box<dyn Error>>>()?;
-
-    let key = PrivateKeyDer::from_pem_file(my_key_path)?;
-
-    let mut truststore = quinn::rustls::RootCertStore::empty();
-    for cert in CertificateDer::pem_file_iter(trust_ca_cert_path)? {
-        truststore.add(cert?)?;
-    }
-
-    Ok((certs, key, truststore))
-}
 
 /// Loads client certificates, a private key, and a trust store from PEM strings.
 ///
@@ -79,50 +45,6 @@ pub fn load_certs_and_key_from_strings(
     }
 
     Ok((certs, key, truststore))
-}
-
-/// Creates and configures a QUIC client endpoint.
-///
-/// This function sets up the TLS configuration with client authentication,
-/// ALPN protocols, and transport parameters like keep-alive and idle timeout.
-///
-/// # Arguments
-///
-/// * `certs`: A vector of `CertificateDer` representing the client's certificate chain.
-/// * `key`: The client's private key as a `PrivateKeyDer`.
-/// * `truststore`: A `RootCertStore` containing the trusted CA certificates for server verification.
-/// * `alpn_protocols`: A slice of byte slices, where each represents a supported ALPN protocol to be advertised to the server.
-///
-/// # Returns
-///
-/// A `Result` containing the configured `quinn::Endpoint` on success, or a `Box<dyn Error>` on failure.
-#[allow(dead_code)]
-pub fn create_quic_client_endpoint(
-    certs: Vec<CertificateDer<'static>>,
-    key: PrivateKeyDer<'static>,
-    truststore: quinn::rustls::RootCertStore,
-    alpn_protocols: &[&[u8]],
-) -> Result<quinn::Endpoint, Box<dyn Error>> {
-    let mut client_config = quinn::rustls::ClientConfig::builder()
-        .with_root_certificates(truststore)
-        .with_client_auth_cert(certs, key)
-        .expect("invalid client auth certs/key");
-    client_config.alpn_protocols = alpn_protocols.iter().map(|p| p.to_vec()).collect();
-    //client_config.alpn_protocols = crate::ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
-
-    let mut quic_client_config =
-        quinn::ClientConfig::new(Arc::new(QuicClientConfig::try_from(client_config)?));
-    let mut transport_config = quinn::TransportConfig::default();
-    transport_config
-        .keep_alive_interval(Some(Duration::from_secs(crate::KEEP_ALIVE_INTERVAL_SECS)))
-        .max_idle_timeout(Some(
-            Duration::from_secs(crate::MAX_IDLE_TIMEOUT_SECS).try_into()?,
-        ));
-    quic_client_config.transport_config(Arc::new(transport_config));
-
-    let mut endpoint = quinn::Endpoint::client("[::]:0".parse().unwrap())?;
-    endpoint.set_default_client_config(quic_client_config);
-    Ok(endpoint)
 }
 
 /// Creates and configures a QUIC server endpoint.
