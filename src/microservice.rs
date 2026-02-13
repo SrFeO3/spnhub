@@ -26,7 +26,7 @@ use bollard::models::{ContainerCreateBody, HostConfig};
 use bollard::query_parameters::{CreateContainerOptions, StartContainerOptions};
 use bollard::errors::Error;
 
-use crate::config::AppConfig;
+use crate::config::AvailabilityManagementConfig;
 
 #[derive(Debug)]
 pub struct ContainerHandle {
@@ -61,7 +61,7 @@ impl From<Error> for StartError {
 /// # Arguments
 /// - `image`: Docker image tag/name (e.g., `"nginx:1.25"`).
 /// - `options`: Not raw options passed to `docker run`
-pub async fn start_container(image: &str, _options: &str) -> Result<ContainerHandle, StartError> {
+async fn start_container(image: &str, _options: &str) -> Result<ContainerHandle, StartError> {
     tracing::info!("Starting container for image: {}...", image);
 
     let docker = Docker::connect_with_unix_defaults()?;
@@ -124,27 +124,8 @@ pub async fn start_container(image: &str, _options: &str) -> Result<ContainerHan
 ///
 /// This function looks up the container image associated with the provided URN
 /// in the application configuration and starts it.
-pub async fn start_provider_by_urn(
-    config: &AppConfig,
-    urn: &str,
+pub async fn start_provider(
+    config: &AvailabilityManagementConfig,
 ) -> Result<ContainerHandle, StartError> {
-    let target_service = config
-        .realms
-        .iter()
-        .flat_map(|r| &r.hubs)
-        .flat_map(|h| &h.services)
-        .find(|s| s.provider == urn);
-
-    match target_service {
-        Some(service) => {
-            if service.availability_management.ondemand_start {
-                tracing::info!("Starting container for provider: {} (image: {})", urn, service.availability_management.image);
-                start_container(&service.availability_management.image, "").await
-            } else {
-                tracing::info!("On-demand start is disabled for provider: {}", urn);
-                Ok(ContainerHandle { id: "ondemand-disabled".to_string() })
-            }
-        }
-        None => Err(StartError::Other(format!("Provider URN not found: {}", urn))),
-    }
+    start_container(&config.image, "").await
 }

@@ -110,7 +110,8 @@ realms:
                   title: api service
                   description: API service for retrieving fruit product data.
                   availabilityManagement:
-                    ondemandStart: true
+                    ondemandStartOnConsumer: false
+                    ondemandStartOnPayload: true
                     idleTimeout: 0  # no shutdown
                     image: "provider-api"
                     command:
@@ -123,7 +124,8 @@ realms:
                   title: auth service
                   description: OpenID Connect (OIDC) authentication service.
                   availabilityManagement:
-                    ondemandStart: true
+                    ondemandStartOnConsumer: true
+                    ondemandStartOnPayload: false
                     idleTimeout: 0  # no shutdown
                     image: "provider-auth"
                     command:
@@ -136,7 +138,8 @@ realms:
                   title: database service
                   description: Database service for the fruit shop.
                   availabilityManagement:
-                    ondemandStart: true
+                    ondemandStartOnConsumer: true
+                    ondemandStartOnPayload: false
                     idleTimeout: 0  # no shutdown
                     image: "provider-db"
                     command:
@@ -149,7 +152,8 @@ realms:
                   title: www service
                   description: Web frontend service for the fruit shop.
                   availabilityManagement:
-                    ondemandStart: true
+                    ondemandStartOnConsumer: true
+                    ondemandStartOnPayload: false
                     idleTimeout: 0  # no shutdown
                     image: "provider-www"
                     command:
@@ -283,7 +287,8 @@ realms:
                   title: api service
                   description: API service for retrieving fruit product data.
                   availabilityManagement:
-                    ondemandStart: true
+                    ondemandStartOnConsumer: true
+                    ondemandStartOnPayload: false
                     idleTimeout: 0  # no shutdown
                     image: "svr-api"
                     command:
@@ -296,7 +301,8 @@ realms:
                   title: auth service
                   description: OpenID Connect (OIDC) authentication service.
                   availabilityManagement:
-                    ondemandStart: true
+                    ondemandStartOnConsumer: true
+                    ondemandStartOnPayload: false
                     idleTimeout: 0  # no shutdown
                     image: "svr-auth"
                     command:

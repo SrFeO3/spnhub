@@ -29,7 +29,6 @@ mod utils;
 mod microservice;
 
 use crate::config::{load_initial_config, ConfigHotReloadService};
-use crate::microservice::start_provider_by_urn;
 
 const MAX_CONCURRENT_UNI_STREAMS: u8 = 0;
 const KEEP_ALIVE_INTERVAL_SECS: u64 = 50;
@@ -518,8 +517,12 @@ struct ConsumerHandler {
     target_provider: Option<quinn::Connection>,
     provider_connections: Arc<Mutex<HashMap<String, HashMap<String, quinn::Connection>>>>,
     consumer_connections: Arc<Mutex<HashMap<String, quinn::Connection>>>,
-    /// Shared application configuration.
-    shared_config: Arc<ArcSwap<crate::config::AppConfig>>,
+    /// Provider URN
+    provider_urn: Option<String>,
+    /// Availability management configuration for provider.
+    availability_config: Option<crate::config::AvailabilityManagementConfig>,
+    /// Tracks if the first stream has been accepted.
+    first_stream_accepted: bool,
 }
 
 /// The outcome of the stream proxying loop, indicating why it terminated.
@@ -564,12 +567,54 @@ impl ConsumerHandler {
             start_at = %context.start_at,
             "QUIC Connection (spn session) established"
         );
+
+        // Extract configuration needed for consumer handling
+        let config = shared_config.load();
+        let service_config = config.realms.iter()
+            .flat_map(|r| &r.hubs)
+            .flat_map(|h| &h.services)
+            .find(|s| s.name == service);
+
+        let (provider_urn, availability_config) = match service_config {
+            Some(s) => (Some(s.provider.clone()), Some(s.availability_management.clone())),
+            None => (None, None),
+        };
+
         Self {
             context,
             target_provider: None,
             provider_connections,
             consumer_connections,
-            shared_config,
+            provider_urn,
+            availability_config,
+            first_stream_accepted: false,
+        }
+    }
+
+    /// Attempts to start the provider for the current service on-demand.
+    fn try_start_provider(&self, on_payload: bool) {
+        if let (Some(urn), Some(am_config)) = (&self.provider_urn, &self.availability_config) {
+            let urn = urn.clone();
+            let am_config = am_config.clone();
+            let service = self.context.service.clone();
+
+            tokio::spawn(async move {
+                let trigger = if on_payload { "payload" } else { "consumer" };
+                let should_start = if on_payload {
+                    am_config.ondemand_start_on_payload
+                } else {
+                    am_config.ondemand_start_on_consumer
+                };
+
+                if should_start {
+                    info!("Starting container for provider (trigger: {}): {} (image: {})", trigger, urn, am_config.image);
+                    if let Err(e) = crate::microservice::start_provider(&am_config).await {
+                        warn!("Failed to attempt on-demand start for service '{}' (URN: {}): {}", service, urn, e);
+                    }
+                } else {
+                    info!("On-demand start ({}) is disabled for provider: {}", trigger, urn);
+                }
+            });
         }
     }
 
@@ -602,20 +647,10 @@ impl ConsumerHandler {
                     return; // Found it, exit the function.
                 }
 
+                // Attempt on-demand provider start on first consumer connected
                 if !start_attempted {
                     start_attempted = true;
-                    let config = self.shared_config.load();
-                    let provider_urn = config.realms.iter()
-                        .flat_map(|r| &r.hubs)
-                        .flat_map(|h| &h.services)
-                        .find(|s| s.name == self.context.service)
-                        .map(|s| s.provider.clone());
-
-                    if let Some(urn) = provider_urn {
-                        if let Err(e) = start_provider_by_urn(&config, &urn).await {
-                            warn!("Failed to attempt on-demand start for service '{}' (URN: {}): {}", self.context.service, urn, e);
-                        }
-                    }
+                    self.try_start_provider(false);
                 }
 
                 // Check for timeout
@@ -688,6 +723,11 @@ impl ConsumerHandler {
                 result = self.context.connection.accept_bi() => {
                     match result {
                         Ok((send, recv)) => {
+                            if !self.first_stream_accepted {
+                                info!("First stream accepted from consumer '{}'", self.context.uri);
+                                self.first_stream_accepted = true;
+                                self.try_start_provider(true);
+                            }
                             info!("Bidirectional stream accepted from consumer '{}'", self.context.uri);
                             let consumer_context = self.context.clone();
                             let tx_clone = error_tx.clone();

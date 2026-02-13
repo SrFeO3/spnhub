@@ -90,7 +90,8 @@ pub struct ServiceConfig {
 #[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct AvailabilityManagementConfig {
-    pub ondemand_start: bool,
+    pub ondemand_start_on_consumer: bool,
+    pub ondemand_start_on_payload: bool,
     pub idle_timeout: u64,
     pub image: String,
     pub command: Option<String>,
