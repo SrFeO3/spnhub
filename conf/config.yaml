@@ -144,6 +144,8 @@ realms:
                     image: "provider-db"
                     command:
                     env:
+                      POSTGRES_PASSWORD: "mysecretpassword123"
+                    options: "-p 5432:5432"
                   provider: urn:chip-in:end-point:hub.master.sr.example.com:database-server
                   consumers:
                       - urn:chip-in:end-point:hub.master.sr.example.com:database-client

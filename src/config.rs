@@ -96,6 +96,7 @@ pub struct AvailabilityManagementConfig {
     pub image: String,
     pub command: Option<String>,
     pub env: Option<HashMap<String, String>>,
+    pub options: Option<String>,
 }
 
 /// Service that monitors configuration file changes and applies them

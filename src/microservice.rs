@@ -21,8 +21,10 @@
 //!   Consider introducing a typed builder to avoid shell-arg pitfalls and injection risks.
 //! - Health monitoring and stop APIs are intentionally left as TODOs in this skeleton.
 
+use std::collections::HashMap;
+
 use bollard::Docker;
-use bollard::models::{ContainerCreateBody, HostConfig};
+use bollard::models::{ContainerCreateBody, HostConfig, PortBinding};
 use bollard::query_parameters::{CreateContainerOptions, StartContainerOptions};
 use bollard::errors::Error;
 
@@ -60,18 +62,109 @@ impl From<Error> for StartError {
 ///
 /// # Arguments
 /// - `image`: Docker image tag/name (e.g., `"nginx:1.25"`).
-/// - `options`: Not raw options passed to `docker run`
-async fn start_container(image: &str, _options: &str) -> Result<ContainerHandle, StartError> {
-    tracing::info!("Starting container for image: {}...", image);
+/// - `options`: Docker CLI-like options string (e.g., `"-p 8080:80 --network host"`)
+/// - `env`: Optional environment variables map.
+///
+/// # Example Configuration (YAML)
+/// ## Nginx Example
+/// ```yaml
+/// availabilityManagement:
+///   image: "nginx:1.25"
+///   options: "-p 8080:80 --network host"
+///   env:
+///     API_KEY: "secret"
+///     DEBUG: "true"
+/// ```
+///
+/// ## PostgreSQL Example
+/// ```yaml
+/// availabilityManagement:
+///   image: "postgres:16"
+///   options: "-p 5432:5432 -v /data/pgdata:/var/lib/postgresql/data"
+///   env:
+///     POSTGRES_PASSWORD: "mysecretpassword"
+///     POSTGRES_USER: "spnuser"
+///     POSTGRES_DB: "spndb"
+/// ```
+async fn start_container(
+    image: &str,
+    options: &str,
+    env: Option<&HashMap<String, String>>,
+) -> Result<ContainerHandle, StartError> {
+    tracing::info!("Starting container for image: {} with options: {}", image, options);
 
-    let docker = Docker::connect_with_unix_defaults()?;
+    let docker = Docker::connect_with_local_defaults()?;
 
     // Generate a dedicated container name (e.g., "nginx:latest" -> "spn_nginx_latest")
     let container_name = format!("spn_{}", image.replace(|c: char| !c.is_alphanumeric(), "_"));
 
+    // Parse options string to configure HostConfig
+    let mut network_mode = Some("spnnet".to_string());
+    let mut binds = Vec::new();
+    let mut port_bindings: HashMap<String, Option<Vec<PortBinding>>> = HashMap::new();
+    let mut privileged = false;
+    let mut cap_add = Vec::new();
+
+    let parts: Vec<&str> = options.split_whitespace().collect();
+    let mut i = 0;
+    while i < parts.len() {
+        match parts[i] {
+            "-p" | "--publish" => {
+                if i + 1 < parts.len() {
+                    // Simple parser for host_port:container_port
+                    if let Some((host, container)) = parts[i + 1].split_once(':') {
+                        let container_port = format!("{}/tcp", container);
+                        let binding = PortBinding {
+                            host_ip: Some("0.0.0.0".to_string()),
+                            host_port: Some(host.to_string()),
+                        };
+                        port_bindings
+                            .entry(container_port)
+                            .or_insert(None)
+                            .get_or_insert_with(Vec::new)
+                            .push(binding);
+                    }
+                    i += 1;
+                }
+            }
+            "--network" => {
+                if i + 1 < parts.len() {
+                    network_mode = Some(parts[i + 1].to_string());
+                    i += 1;
+                }
+            }
+            "-v" | "--volume" => {
+                if i + 1 < parts.len() {
+                    binds.push(parts[i + 1].to_string());
+                    i += 1;
+                }
+            }
+            "--privileged" => privileged = true,
+            "--cap-add" => {
+                if i + 1 < parts.len() {
+                    cap_add.push(parts[i + 1].to_string());
+                    i += 1;
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+
+    // Prepare environment variables
+    let env_vars = env.map(|map| {
+        map.iter()
+            .map(|(k, v)| format!("{}={}", k, v))
+            .collect::<Vec<String>>()
+    });
+
     // 1. Setup HostConfig
     let host_config = HostConfig {
-        network_mode: Some("spnnet".to_string()),
+        network_mode,
+        binds: Some(binds),
+        port_bindings: Some(port_bindings),
+        privileged: Some(privileged),
+        cap_add: Some(cap_add),
         ..Default::default()
     };
 
@@ -79,6 +172,7 @@ async fn start_container(image: &str, _options: &str) -> Result<ContainerHandle,
     let config = ContainerCreateBody {
         image: Some(image.to_string()),
         host_config: Some(host_config),
+        env: env_vars,
         ..Default::default()
     };
 
@@ -101,6 +195,9 @@ async fn start_container(image: &str, _options: &str) -> Result<ContainerHandle,
         }
         Err(e) => {
             tracing::error!("Failed to create container {}: {}", container_name, e);
+            if e.to_string().contains("Connect") || e.to_string().contains("Permission denied") {
+                tracing::error!("Check permissions for /var/run/docker.sock. If running as non-root (appuser), ensure the user has access to the Docker socket.");
+            }
             return Err(e.into());
         }
     };
@@ -127,5 +224,17 @@ async fn start_container(image: &str, _options: &str) -> Result<ContainerHandle,
 pub async fn start_provider(
     config: &AvailabilityManagementConfig,
 ) -> Result<ContainerHandle, StartError> {
-    start_container(&config.image, "").await
+    let result = start_container(
+        &config.image,
+        config.options.as_deref().unwrap_or(""),
+        config.env.as_ref(),
+    )
+    .await;
+
+    match &result {
+        Ok(handle) => tracing::info!("start_provider result: success, container_id={}", handle.id),
+        Err(e) => tracing::info!("start_provider result: failure, error={}", e),
+    }
+
+    result
 }
