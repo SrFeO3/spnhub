@@ -1,43 +1,111 @@
-use arc_swap::ArcSwap;
-use serde::Deserialize;
+//! # Configuration Management
+//!
+//! This module is responsible for defining, loading, and managing the application's
+//! configuration. It includes data structures that map directly to the `config.yaml` file,
+//! and logic for hot-reloading configurations without service interruption.
+//!
+//! ## Key Components
+//!
+//! - **`AppConfig` and related structs**: These are `serde`-deserializable structures
+//!   that represent the hierarchy of the `config.yaml` file.
+//!
+//! - **`ConfigHotReloadService`**: A background service that monitors `config.yaml` for changes
+//!   and applies them to the running application without downtime. It uses `ArcSwap` to
+//!   atomically update shared configuration data.
+//!
+//! - **Caches and Registries (`UpstreamCache`, `CertificateCache`, `AuthScopeRegistry`, `JwtKeysCache`)**:
+//!   These components hold processed, ready-to-use data derived from the main configuration.
+//!   They are designed to be hot-reloaded and are managed by the `ConfigHotReloadService`.
+//!
+//! ## Hot-Reloading and Idempotency
+//!
+//! The hot-reloading mechanism is designed to be idempotent and minimally disruptive:
+//! - **JWT Keys, Certificates, and Upstreams**: When the configuration changes, only the
+//!   items that have been added, modified, or removed are updated. Unchanged items are
+//!   left as-is.
+//! - **Authentication Scopes**: The `AuthScopeRegistry` performs a differential update.
+//!   It adds new scopes and removes obsolete ones, but crucially, it does **not** touch
+//!   existing, unchanged scopes. This ensures that active user sessions within those
+//!   scopes are preserved across configuration reloads.
+//!
+//! ## Usage Examples
+//!
+//! ### 1. Starting the Hot-Reload Service
+//!
+//! In your `main.rs`, initialize the configuration and start the monitoring service:
+//!
+//! ```rust,no_run
+//! use std::sync::Arc;
+//! use arc_swap::ArcSwap;
+//! // Assuming this module is accessible as `crate::config`
+//! use crate::config::{load_initial_config, ConfigHotReloadService};
+//!
+//! #[tokio::main]
+//! async fn main() {
+//!     let config_path = "config.yaml".to_string();
+//!
+//!     // Load initial config
+//!     let initial_config = load_initial_config(&config_path).expect("Failed to load configuration");
+//!
+//!     // Create shared storage (ArcSwap allows lock-free reads)
+//!     let shared_config = Arc::new(ArcSwap::from_pointee(initial_config));
+//!
+//!     // Start hot-reload service in a background task
+//!     let reload_service = ConfigHotReloadService::new(config_path.clone(), shared_config.clone());
+//!     tokio::spawn(async move {
+//!         reload_service.start().await;
+//!     });
+//!
+//!     // Pass `shared_config` to your server or components...
+//! }
+//! ```
+//!
+//! ### 2. Accessing Configuration Values
+//!
+//! Use `load()` to get a consistent snapshot of the configuration.
+//!
+//! ```rust,no_run
+//! use std::sync::Arc;
+//! use arc_swap::ArcSwap;
+//! use crate::config::AppConfig;
+//!
+//! fn handle_request(shared_config: &Arc<ArcSwap<AppConfig>>) {
+//!     // Get a snapshot (Guard) - this is cheap and lock-free
+//!     let config = shared_config.load();
+//!
+//!     // Access fields directly
+//!     for realm in &config.realms {
+//!         println!("Hub Name: {}", realm.hub.name);
+//!         println!("Server Port: {}", realm.hub.server_port);
+//!
+//!         // Access nested fields (e.g., services)
+//!         for service in &realm.hub.services {
+//!             println!("Service: {}, Image: {}", service.name, service.availability_management.image);
+//!         }
+//!     }
+//!
+//!     // Generate the service map from the config
+//!     let service_map = crate::config::generate_service_map(&config);
+//!     if let Some(service_name) = service_map.get("urn:chip-in:end-point:hub.master.TEST1ZONE:www-gateway") {
+//!         println!("Service for URN is: {}", service_name);
+//!     }
+//! }
+//! ```
+//!
+//! ### 3. Specifying the Configuration File
+//!
+//! The file path is passed to `load_initial_config` and `ConfigHotReloadService::new`.
+
 use std::collections::HashMap;
 use std::fs;
 use std::sync::Arc;
+
+use arc_swap::ArcSwap;
+use serde::Deserialize;
+use tracing::{info, warn};
 use tokio::sync::Mutex;
 use tokio::time;
 use tokio::time::Duration;
-/// # Configuration Management
-///
-/// This module is responsible for defining, loading, and managing the application's
-/// configuration. It includes data structures that map directly to the `config.yaml` file,
-/// and logic for hot-reloading configurations without service interruption.
-///
-/// ## Key Components:
-///
-/// - **`AppConfig` and related structs**: These are `serde`-deserializable structures
-///   that represent the hierarchy of the `config.yaml` file.
-///
-/// - **`ConfigHotReloadService`**: A background service that monitors `config.yaml` for changes
-///   and applies them to the running application without downtime. It uses `ArcSwap` to
-///   atomically update shared configuration data.
-///
-/// - **Caches and Registries (`UpstreamCache`, `CertificateCache`, `AuthScopeRegistry`, `JwtKeysCache`)**:
-///   These components hold processed, ready-to-use data derived from the main configuration.
-///   They are designed to be hot-reloaded and are managed by the `ConfigHotReloadService`.
-///
-/// ## Hot-Reloading and Idempotency
-///
-/// The hot-reloading mechanism is designed to be idempotent and minimally disruptive:
-/// - **JWT Keys, Certificates, and Upstreams**: When the configuration changes, only the
-///   items that have been added, modified, or removed are updated. Unchanged items are
-///   left as-is.
-/// - **Authentication Scopes**: The `AuthScopeRegistry` performs a differential update.
-///   It adds new scopes and removes obsolete ones, but crucially, it does **not** touch
-///   existing, unchanged scopes. This ensures that active user sessions within those
-///   scopes are preserved across configuration reloads.
-///
-use tracing::info;
-use tracing::warn;
 
 /// Application-wide configuration structure
 #[derive(Debug, Deserialize, Clone)]

@@ -1,14 +1,15 @@
-// spn is an infrastructure system for building and managing distributed component applications,
-// particularly those that are containerized. The spn system consists of two main parts that
-// work in tandem: spn_hub and spn_agent. This is the source code for spn_hub.
-//
-// USAGE:
-//   To run the hub with info-level logging:
-//   RUST_LOG=info cargo run
-//
-// TODO:
-//   - replace target provider on cunsumer, re-connected on provider
-//   - Refactor utils.rs/create_quic_client_endpoint, which is currently marked as dead_code.
+//! # SPN Hub Server
+//!
+//! `spn` is an infrastructure system for building and managing distributed component applications,
+//! particularly those that are containerized. The system consists of two main parts that
+//! work in tandem: `spn_hub` and `spn_agent`. This crate implements `spn_hub`.
+//!
+//! ## Usage
+//! To run the hub with info-level logging:
+//! `RUST_LOG=info cargo run`
+//!
+//! ## TODO
+//! - Replace target provider on consumer reconnection.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -32,6 +33,7 @@ const MAX_CONCURRENT_UNI_STREAMS: u8 = 0;
 const KEEP_ALIVE_INTERVAL_SECS: u64 = 50;
 const DATAGRAM_RECEIVE_BUFFER_SIZE: usize = 1024 * 1024;
 
+/// Command-line arguments.
 #[derive(Parser)]
 struct Args {
     // command-line arguments or environment variables
@@ -142,7 +144,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 /// Manages the overall lifecycle of the server.
 struct Server {
-    /// The QUIC endpoint for the server.
+    /// The QUIC endpoint bound to the server socket.
     endpoint: quinn::Endpoint,
     /// A map storing provider connections.
     /// Key: Service name -> Inner Key: Provider URI (CN) -> Value: QUIC connection.
@@ -150,9 +152,9 @@ struct Server {
     /// A map storing consumer connections.
     /// Key: Consumer URI (CN) -> Value: QUIC connection.
     consumer_connections: Arc<Mutex<HashMap<String, quinn::Connection>>>,
-    /// A map for looking up the service name associated with a given URI (CN).
+    /// A map for looking up the service name associated with a given endpoint URI (CN).
     service_map: Arc<HashMap<String, String>>,
-    /// Shared application configuration for on-demand start.
+    /// Shared application configuration, used for features like on-demand start.
     shared_config: Arc<ArcSwap<crate::config::AppConfig>>,
 }
 
@@ -190,81 +192,7 @@ impl Server {
 
             loop {
                 interval.tick().await;
-
-                // 1. Create snapshots to minimize lock duration
-                let (provider_snapshot, consumer_snapshot, provider_count, consumer_count) = {
-                    let providers_lock = providers.lock().await;
-                    let consumers_lock = consumers.lock().await;
-
-                    let provider_count: usize = providers_lock.values().map(|v| v.len()).sum();
-                    let consumer_count = consumers_lock.len();
-
-                    let provider_snapshot: Vec<_> = providers_lock
-                        .iter()
-                        .flat_map(|(service, map)| {
-                            map.iter()
-                                .map(|(cn, conn)| (service.clone(), cn.clone(), conn.clone()))
-                        })
-                        .collect();
-
-                    let consumer_snapshot: Vec<_> = consumers_lock
-                        .iter()
-                        .map(|(uri, conn)| (uri.clone(), conn.clone()))
-                        .collect();
-
-                    (
-                        provider_snapshot,
-                        consumer_snapshot,
-                        provider_count,
-                        consumer_count,
-                    )
-                }; // Locks are released here
-
-                // Get tokio thread info (requires `tokio_unstable` feature).
-                let tokio_workers = tokio::runtime::Handle::current().metrics().num_workers();
-                let tokio_tasks = tokio::runtime::Handle::current()
-                    .metrics()
-                    .num_alive_tasks();
-
-                info!(
-                    message = "Server Stats",
-                    total_connections = provider_count + consumer_count,
-                    tokio_workers,
-                    tokio_tasks,
-                    provider_connections = provider_count,
-                    consumer_connections = consumer_count,
-                );
-
-                // 2. Log stats outside the lock
-                for (service, cn, conn) in provider_snapshot {
-                    let stats = conn.stats();
-                    info!(
-                        type = "provider",
-                        service,
-                        cn,
-                        id = conn.stable_id(),
-                        rtt_ms = stats.path.rtt.as_millis(),
-                        lost_packets = stats.path.lost_packets,
-                        " - Provider connection stats"
-                    );
-                }
-
-                for (uri, conn) in consumer_snapshot {
-                    let stats = conn.stats();
-                    let service = service_map
-                        .get(&uri)
-                        .map(|s| s.as_str())
-                        .unwrap_or("unknown");
-                    info!(
-                        type = "consumer",
-                        service,
-                        uri,
-                        id = conn.stable_id(),
-                        rtt_ms = stats.path.rtt.as_millis(),
-                        lost_packets = stats.path.lost_packets,
-                        " - Consumer connection stats"
-                    );
-                }
+                Self::report_stats(&providers, &consumers, &service_map).await;
             }
         });
 
@@ -369,7 +297,86 @@ impl Server {
         self.endpoint.wait_idle().await;
         info!("Shutdown complete.");
     }
+
+    /// Reports server statistics.
+    async fn report_stats(
+        providers: &Arc<Mutex<HashMap<String, HashMap<String, quinn::Connection>>>>,
+        consumers: &Arc<Mutex<HashMap<String, quinn::Connection>>>,
+        service_map: &Arc<HashMap<String, String>>,
+    ) {
+        // 1. Create snapshots to minimize lock duration
+        let (provider_snapshot, consumer_snapshot, provider_count, consumer_count) = {
+            let providers_lock = providers.lock().await;
+            let consumers_lock = consumers.lock().await;
+
+            let provider_count: usize = providers_lock.values().map(|v| v.len()).sum();
+            let consumer_count = consumers_lock.len();
+
+            let provider_snapshot: Vec<_> = providers_lock
+                .iter()
+                .flat_map(|(service, map)| {
+                    map.iter().map(|(cn, conn)| (service.clone(), cn.clone(), conn.clone()))
+                })
+                .collect();
+
+            let consumer_snapshot: Vec<_> = consumers_lock
+                .iter()
+                .map(|(uri, conn)| (uri.clone(), conn.clone()))
+                .collect();
+
+            (
+                provider_snapshot,
+                consumer_snapshot,
+                provider_count,
+                consumer_count,
+            )
+        }; // Locks are released here
+
+        // Get tokio thread info (requires `tokio_unstable` feature).
+        let tokio_workers = tokio::runtime::Handle::current().metrics().num_workers();
+        let tokio_tasks = tokio::runtime::Handle::current()
+            .metrics()
+            .num_alive_tasks();
+
+        info!(
+            message = "Server Stats",
+            total_connections = provider_count + consumer_count,
+            tokio_workers,
+            tokio_tasks,
+            provider_connections = provider_count,
+            consumer_connections = consumer_count,
+        );
+
+        // 2. Log stats outside the lock
+        for (service, cn, conn) in provider_snapshot {
+            let stats = conn.stats();
+            info!(
+                type = "provider",
+                service,
+                cn,
+                id = conn.stable_id(),
+                rtt_ms = stats.path.rtt.as_millis(),
+                lost_packets = stats.path.lost_packets,
+                " - Provider connection stats"
+            );
+        }
+
+        for (uri, conn) in consumer_snapshot {
+            let stats = conn.stats();
+            let service = service_map.get(&uri).map(|s| s.as_str()).unwrap_or("unknown");
+            info!(
+                type = "consumer",
+                service,
+                uri,
+                id = conn.stable_id(),
+                rtt_ms = stats.path.rtt.as_millis(),
+                lost_packets = stats.path.lost_packets,
+                " - Consumer connection stats"
+            );
+        }
+    }
 }
+
 
 /// Holds contextual information for a single connection.
 #[derive(Clone)]
@@ -383,7 +390,7 @@ struct ConnectionContext {
 }
 
 /// Handles connections from clients with the "provider" role.
-/// Providers send data over unidirectional streams.
+/// Providers register themselves and wait for incoming requests (proxied streams).
 struct ProviderHandler {
     context: ConnectionContext,
     provider_connections: Arc<Mutex<HashMap<String, HashMap<String, quinn::Connection>>>>,
@@ -536,7 +543,7 @@ impl ProviderHandler {
 }
 
 /// Handles connections from clients with the "consumer" role.
-/// This is a placeholder for future implementation.
+/// Consumers initiate bidirectional streams to request data from providers.
 struct ConsumerHandler {
     context: ConnectionContext,
     target_provider: Option<quinn::Connection>,
@@ -550,11 +557,11 @@ struct ConsumerHandler {
     first_stream_accepted: bool,
 }
 
-/// The outcome of the stream proxying loop, indicating why it terminated.
+/// Represents the outcome of the stream proxying loop.
 enum ProxyLoopResult {
-    /// A recoverable error related to the provider occurred. The handler should try to find a new provider.
+    /// A recoverable error related to the provider occurred (e.g., connection lost). The handler should attempt to find a new provider.
     ProviderError,
-    /// A fatal error occurred, or the consumer connection was closed. This is the final reason for termination.
+    /// A fatal error occurred, or the consumer connection was closed. The handler should terminate.
     ConnectionClosed(quinn::ConnectionError),
 }
 
@@ -621,7 +628,7 @@ impl ConsumerHandler {
         }
     }
 
-    /// Executes the on-demand start
+    /// Executes the on-demand start logic for a provider.
     async fn execute_ondemand_start(
         urn: &str,
         am_config: &crate::config::AvailabilityManagementConfig,
@@ -699,7 +706,7 @@ impl ConsumerHandler {
     }
 
     /// Finds a provider with the same service and sets it as the target,
-    /// retrying periodically until one is found or a timeout is reached.
+    /// retrying periodically until one is found or the timeout is reached.
     async fn find_and_set_target_provider(&mut self, interval: Duration, timeout: Duration) {
         let start_time = Instant::now();
         info!(
@@ -757,7 +764,7 @@ impl ConsumerHandler {
         }
     }
 
-    /// Manages the proxying of all streams for a single, established provider connection.
+    /// Manages the proxying of streams for a single, established provider connection.
     ///
     /// This function contains the primary `select!` loop that accepts new streams from the consumer
     /// and monitors for errors reported by the individual stream proxy tasks.
@@ -765,8 +772,8 @@ impl ConsumerHandler {
         &mut self,
         provider_conn: quinn::Connection,
     ) -> ProxyLoopResult {
-        /// Enum to distinguish between different kinds of stream proxy errors,
-        /// so this loop can decide how to react. This is an implementation detail of this function.
+        /// Internal enum to distinguish between different kinds of stream proxy errors,
+        /// allowing the loop to decide how to react.
         #[derive(Debug)]
         enum ProxyError {
             /// Indicates a problem with the provider connection, suggesting a retry might be needed.
@@ -865,7 +872,7 @@ impl ConsumerHandler {
         }
     }
 
-    /// Runs the main consumer connection logic.
+    /// Executes the main logic for handling a consumer connection.
     ///
     /// This method orchestrates finding a provider and then handing off to the stream
     /// proxying loop. It will re-attempt to find a provider if the connection to an
@@ -953,8 +960,8 @@ impl ConsumerHandler {
     }
 }
 
-/// Forwards data between a consumer's stream and a new stream to a provider.
-/// This function acts as a proxy for a single request.
+/// Forwards data between a consumer's stream and a new stream opened to a provider.
+/// This function acts as a proxy for a single request/response interaction.
 async fn proxy_consumer_stream_to_provider(
     mut consumer_send: quinn::SendStream,
     mut consumer_recv: quinn::RecvStream,

@@ -1,25 +1,26 @@
-//! microservice.rs
-//! Control-plane module responsible for the lifecycle of services:
-//! - spawn (start)
-//! - monitor health (watch)
-//! - stop (graceful/forced shutdown)
+//! # Microservice Management
 //!
-//! Runtime assumption:
-//! - This version targets **Docker** as the container runtime.
-//! - Future versions may introduce pluggable backends (e.g., containerd/CRI, Kubernetes).
+//! This module acts as the control-plane responsible for the lifecycle of microservices.
 //!
-//! Concurrency model:
-//! - Asynchronous APIs via `tokio` to avoid blocking the service itself.
+//! It handles:
+//! - Spawning (starting) services.
+//! - Monitoring health (watching).
+//! - Stopping (graceful/forced shutdown).
 //!
-//! API surface (initial skeleton):
-//! - `start_container(image: &str, options: &str) -> Result<ContainerHandle, StartError>`
-//!   * Starts a container using a Docker image and an option string.
-//!   * Returns success with a `ContainerHandle`, or failure with a reason (`StartError`).
+//! ## Runtime Assumptions
+//! - Currently targets **Docker** as the container runtime.
+//! - Future versions may support pluggable backends (e.g., containerd/CRI, Kubernetes).
 //!
-//! Notes:
-//! - `options` is a raw string for now (e.g., `"--detach --rm --name svc-a -p 8080:80"`).
-//!   Consider introducing a typed builder to avoid shell-arg pitfalls and injection risks.
-//! - Health monitoring and stop APIs are intentionally left as TODOs in this skeleton.
+//! ## Concurrency Model
+//! - Uses asynchronous APIs via `tokio` to avoid blocking the main event loop.
+//!
+//! ## API Surface
+//! - `start_container`: Starts a container using a Docker image and options.
+//!
+//! ## Notes
+//! - `options` is currently a raw string (e.g., `"--detach --rm --name svc-a -p 8080:80"`).
+//!   A typed builder pattern is planned to avoid shell-arg pitfalls and injection risks.
+//! - Health monitoring and stop APIs are pending implementation.
 
 use std::collections::HashMap;
 
@@ -30,11 +31,14 @@ use bollard::query_parameters::{CreateContainerOptions, StartContainerOptions};
 
 use crate::config::AvailabilityManagementConfig;
 
+/// A handle to a started container.
 #[derive(Debug)]
 pub struct ContainerHandle {
+    /// The Docker container ID.
     pub id: String,
 }
 
+/// Errors that can occur during container startup.
 #[derive(Debug)]
 pub enum StartError {
     Docker(Error),
@@ -58,12 +62,12 @@ impl From<Error> for StartError {
     }
 }
 
-/// Start a microservice container using Docker.
+/// Starts a microservice container using Docker.
 ///
 /// # Arguments
 /// - `image`: Docker image tag/name (e.g., `"nginx:1.25"`).
-/// - `options`: Docker CLI-like options string (e.g., `"-p 8080:80 --network host"`)
-/// - `env`: Optional environment variables map.
+/// - `options`: Docker CLI-like options string (e.g., `"-p 8080:80 --network host"`).
+/// - `env`: Optional map of environment variables.
 ///
 /// # Example Configuration (YAML)
 /// ## Nginx Example
@@ -238,7 +242,7 @@ async fn start_container(
     Ok(ContainerHandle { id })
 }
 
-/// Starts a container corresponding to the given provider URN.
+/// Starts a container for the specified provider configuration.
 ///
 /// This function looks up the container image associated with the provided URN
 /// in the application configuration and starts it.

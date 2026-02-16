@@ -1,3 +1,12 @@
+//! # Utilities
+//!
+//! This module provides general utility functions for the application.
+//!
+//! Key functionalities include:
+//! - Loading certificates and keys from PEM strings.
+//! - Configuring and creating QUIC server endpoints.
+//! - Inspecting QUIC connections to extract client identity (CN) and ALPN.
+
 use std::error::Error;
 use std::io::Cursor;
 use std::net::ToSocketAddrs;
@@ -102,6 +111,19 @@ pub fn create_quic_server_endpoint(
     Ok(endpoint)
 }
 
+/// Inspects a new connection to retrieve client certificate information (CN) and ALPN protocol.
+///
+/// This function logs details about the client certificate and the negotiated ALPN protocol.
+///
+/// # Arguments
+///
+/// * `connection`: The QUIC connection to inspect.
+///
+/// # Returns
+///
+/// A tuple containing:
+/// * `Option<String>`: The Common Name (CN) from the client certificate, if present.
+/// * `Option<String>`: The negotiated ALPN protocol, if present.
 pub(crate) async fn check_and_get_info_connection(
     connection: quinn::Connection,
 ) -> (Option<String>, Option<String>) {
