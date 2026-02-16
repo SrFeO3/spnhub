@@ -18,7 +18,7 @@ use arc_swap::ArcSwap;
 use chrono::{DateTime, Utc};
 use clap::Parser;
 use rustls::crypto::ring::default_provider;
-use tokio::sync::{Mutex, mpsc};
+use tokio::sync::{mpsc, RwLock};
 use tokio::time::{self, Duration, Instant};
 use tracing::{Instrument, error, info, info_span, warn};
 use tracing_subscriber::EnvFilter;
@@ -100,8 +100,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             )?;
 
             // Create a shared state for provider connections and consumer connections
-            let provider_connections = Arc::new(Mutex::new(HashMap::new()));
-            let consumer_connections = Arc::new(Mutex::new(HashMap::new()));
+            let provider_connections = Arc::new(RwLock::new(HashMap::new()));
+            let consumer_connections = Arc::new(RwLock::new(HashMap::new()));
 
             let mut service_map = HashMap::new();
             for service in &hub.services {
@@ -148,10 +148,10 @@ struct Server {
     endpoint: quinn::Endpoint,
     /// A map storing provider connections.
     /// Key: Service name -> Inner Key: Provider URI (CN) -> Value: QUIC connection.
-    provider_connections: Arc<Mutex<HashMap<String, HashMap<String, quinn::Connection>>>>,
+    provider_connections: Arc<RwLock<HashMap<String, HashMap<String, quinn::Connection>>>>,
     /// A map storing consumer connections.
     /// Key: Consumer URI (CN) -> Value: QUIC connection.
-    consumer_connections: Arc<Mutex<HashMap<String, quinn::Connection>>>,
+    consumer_connections: Arc<RwLock<HashMap<String, quinn::Connection>>>,
     /// A map for looking up the service name associated with a given endpoint URI (CN).
     service_map: Arc<HashMap<String, String>>,
     /// Shared application configuration, used for features like on-demand start.
@@ -162,8 +162,8 @@ impl Server {
     /// Creates a new server instance.
     fn new(
         endpoint: quinn::Endpoint,
-        provider_connections: Arc<Mutex<HashMap<String, HashMap<String, quinn::Connection>>>>,
-        consumer_connections: Arc<Mutex<HashMap<String, quinn::Connection>>>,
+        provider_connections: Arc<RwLock<HashMap<String, HashMap<String, quinn::Connection>>>>,
+        consumer_connections: Arc<RwLock<HashMap<String, quinn::Connection>>>,
         service_map: Arc<HashMap<String, String>>,
         shared_config: Arc<ArcSwap<crate::config::AppConfig>>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
@@ -300,14 +300,14 @@ impl Server {
 
     /// Reports server statistics.
     async fn report_stats(
-        providers: &Arc<Mutex<HashMap<String, HashMap<String, quinn::Connection>>>>,
-        consumers: &Arc<Mutex<HashMap<String, quinn::Connection>>>,
+        providers: &Arc<RwLock<HashMap<String, HashMap<String, quinn::Connection>>>>,
+        consumers: &Arc<RwLock<HashMap<String, quinn::Connection>>>,
         service_map: &Arc<HashMap<String, String>>,
     ) {
         // 1. Create snapshots to minimize lock duration
         let (provider_snapshot, consumer_snapshot, provider_count, consumer_count) = {
-            let providers_lock = providers.lock().await;
-            let consumers_lock = consumers.lock().await;
+            let providers_lock = providers.read().await;
+            let consumers_lock = consumers.read().await;
 
             let provider_count: usize = providers_lock.values().map(|v| v.len()).sum();
             let consumer_count = consumers_lock.len();
@@ -393,7 +393,7 @@ struct ConnectionContext {
 /// Providers register themselves and wait for incoming requests (proxied streams).
 struct ProviderHandler {
     context: ConnectionContext,
-    provider_connections: Arc<Mutex<HashMap<String, HashMap<String, quinn::Connection>>>>,
+    provider_connections: Arc<RwLock<HashMap<String, HashMap<String, quinn::Connection>>>>,
 }
 
 impl ProviderHandler {
@@ -401,7 +401,7 @@ impl ProviderHandler {
     fn new(
         connection: quinn::Connection,
         cn: String,
-        provider_connections: Arc<Mutex<HashMap<String, HashMap<String, quinn::Connection>>>>,
+        provider_connections: Arc<RwLock<HashMap<String, HashMap<String, quinn::Connection>>>>,
         service_map: Arc<HashMap<String, String>>,
         _shared_config: Arc<ArcSwap<crate::config::AppConfig>>,
     ) -> Self {
@@ -484,7 +484,7 @@ impl ProviderHandler {
 
         // Add the connection to the shared map.
         {
-            let mut providers_by_service = self.provider_connections.lock().await;
+            let mut providers_by_service = self.provider_connections.write().await;
             providers_by_service
                 .entry(self.context.service.clone())
                 .or_default()
@@ -512,7 +512,7 @@ impl ProviderHandler {
         let stats = self.context.connection.stats();
         // Remove the connection from the shared map upon disconnection.
         {
-            let mut providers_by_service = self.provider_connections.lock().await;
+            let mut providers_by_service = self.provider_connections.write().await;
             if let Some(providers_for_service) = providers_by_service.get_mut(&self.context.service)
             {
                 providers_for_service.remove(&self.context.uri);
@@ -547,8 +547,8 @@ impl ProviderHandler {
 struct ConsumerHandler {
     context: ConnectionContext,
     target_provider: Option<quinn::Connection>,
-    provider_connections: Arc<Mutex<HashMap<String, HashMap<String, quinn::Connection>>>>,
-    consumer_connections: Arc<Mutex<HashMap<String, quinn::Connection>>>,
+    provider_connections: Arc<RwLock<HashMap<String, HashMap<String, quinn::Connection>>>>,
+    consumer_connections: Arc<RwLock<HashMap<String, quinn::Connection>>>,
     /// Provider URN
     provider_urn: Option<String>,
     /// Availability management configuration for provider.
@@ -570,8 +570,8 @@ impl ConsumerHandler {
     fn new(
         connection: quinn::Connection,
         cn: String,
-        provider_connections: Arc<Mutex<HashMap<String, HashMap<String, quinn::Connection>>>>,
-        consumer_connections: Arc<Mutex<HashMap<String, quinn::Connection>>>,
+        provider_connections: Arc<RwLock<HashMap<String, HashMap<String, quinn::Connection>>>>,
+        consumer_connections: Arc<RwLock<HashMap<String, quinn::Connection>>>,
         service_map: Arc<HashMap<String, String>>,
         shared_config: Arc<ArcSwap<crate::config::AppConfig>>,
     ) -> Self {
@@ -718,7 +718,7 @@ impl ConsumerHandler {
         loop {
             // --- Lock Scope Start ---
             let found_provider = {
-                let providers_by_service = self.provider_connections.lock().await;
+                let providers_by_service = self.provider_connections.read().await;
                 providers_by_service
                     .get(&self.context.service)
                     .and_then(|providers| providers.iter().next())
@@ -888,7 +888,7 @@ impl ConsumerHandler {
 
         // Add the connection to the shared map.
         {
-            let mut consumers = self.consumer_connections.lock().await;
+            let mut consumers = self.consumer_connections.write().await;
             consumers.insert(self.context.uri.clone(), self.context.connection.clone());
             info!(
                 "Consumer '{}' added to connection map. (Total: {})",
@@ -936,7 +936,7 @@ impl ConsumerHandler {
 
         // Remove the connection from the shared map upon disconnection.
         {
-            let mut consumers = self.consumer_connections.lock().await;
+            let mut consumers = self.consumer_connections.write().await;
             consumers.remove(&self.context.uri);
             info!(
                 "Consumer '{}' removed from connection map. (Total remaining: {})",
