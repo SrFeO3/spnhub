@@ -426,8 +426,36 @@ impl ProviderHandler {
         }
     }
 
+    /// Spawns a background task to listen for control datagrams.
+    ///
+    /// Supported control messages:
+    /// - `notify_shutdown`: Notifies that the provider is starting a graceful shutdown.
+    fn spawn_control_datagram_handler(&self) {
+        let datagram_conn = self.context.connection.clone();
+        let provider_uri = self.context.uri.clone();
+
+        tokio::spawn(async move {
+            while let Ok(bytes) = datagram_conn.read_datagram().await {
+                let message = String::from_utf8_lossy(&bytes);
+                info!("Received control datagram from provider '{}': {:?}", provider_uri, message);
+
+                match message.trim() {
+                    "notify_shutdown" => {
+                        info!("Provider '{}' notified graceful shutdown start.", provider_uri);
+                    }
+                    _ => {
+                        warn!("Unknown control message from provider '{}': {}", provider_uri, message);
+                    }
+                }
+            }
+        });
+    }
+
     /// Runs a loop on the connection to accept streams from the provider.
     async fn run(&self) -> Result<(), quinn::ConnectionError> {
+        // Start a background task to listen for control datagrams
+        self.spawn_control_datagram_handler();
+
         // Add the connection to the shared map.
         {
             let mut providers_by_service = self.provider_connections.lock().await;
@@ -604,6 +632,51 @@ impl ConsumerHandler {
                 trigger, urn
             );
         }
+    }
+
+    /// Spawns a background task to listen for control datagrams.
+    ///
+    /// Supported control messages:
+    /// - `request_provider_start`: Triggers on-demand provider start.
+    /// - `notify_shutdown`: Notifies that the consumer is starting a graceful shutdown.
+    fn spawn_control_datagram_handler(&self) {
+        let datagram_conn = self.context.connection.clone();
+        let provider_urn = self.provider_urn.clone();
+        let availability_config = self.availability_config.clone();
+        let service_name = self.context.service.clone();
+        let consumer_uri = self.context.uri.clone();
+
+        tokio::spawn(async move {
+            // Wait for datagrams (signals) from the consumer in a loop
+            while let Ok(bytes) = datagram_conn.read_datagram().await {
+                let message = String::from_utf8_lossy(&bytes);
+                info!("Received control datagram from consumer '{}': {:?}", consumer_uri, message);
+
+                match message.trim() {
+                    "request_provider_start" => {
+                        if let (Some(urn), Some(am_config)) = (&provider_urn, &availability_config) {
+                            let urn = urn.clone();
+                            let am_config = am_config.clone();
+                            let service_name = service_name.clone();
+                            tokio::spawn(async move {
+                                Self::execute_ondemand_start(
+                                    &urn,
+                                    &am_config,
+                                    &service_name,
+                                    "payload"
+                                ).await;
+                            });
+                        }
+                    }
+                    "notify_shutdown" => {
+                        info!("Consumer '{}' notified graceful shutdown start.", consumer_uri);
+                    }
+                    _ => {
+                        warn!("Unknown control message from consumer '{}': {}", consumer_uri, message);
+                    }
+                }
+            }
+        });
     }
 
     /// Finds a provider with the same service and sets it as the target,
@@ -784,50 +857,8 @@ impl ConsumerHandler {
             self.context.uri, self.context.service
         );
 
-        // Start a background task to listen for a single control datagram
-        // and trigger on-demand provider start if configured.
-        let datagram_conn = self.context.connection.clone();
-        let provider_urn = self.provider_urn.clone();
-        let availability_config = self.availability_config.clone();
-        let service_name = self.context.service.clone();
-        let consumer_uri = self.context.uri.clone();
-
-        tokio::spawn(async move {
-            // Wait for datagrams (signals) from the consumer in a loop
-            while let Ok(bytes) = datagram_conn.read_datagram().await {
-                let message = String::from_utf8_lossy(&bytes);
-                info!(
-                    "Received control datagram from consumer '{}': {:?}",
-                    consumer_uri, message
-                );
-
-                match message.trim() {
-                    "start_provider" => {
-                        if let (Some(urn), Some(am_config)) = (&provider_urn, &availability_config)
-                        {
-                            let urn = urn.clone();
-                            let am_config = am_config.clone();
-                            let service_name = service_name.clone();
-                            tokio::spawn(async move {
-                                Self::execute_ondemand_start(
-                                    &urn,
-                                    &am_config,
-                                    &service_name,
-                                    "payload",
-                                )
-                                .await;
-                            });
-                        }
-                    }
-                    _ => {
-                        warn!(
-                            "Unknown control message from consumer '{}': {}",
-                            consumer_uri, message
-                        );
-                    }
-                }
-            }
-        });
+        // Start a background task to listen for control datagram
+        self.spawn_control_datagram_handler();
 
         // Add the connection to the shared map.
         {
