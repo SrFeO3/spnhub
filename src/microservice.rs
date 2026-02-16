@@ -1,5 +1,5 @@
 //! microservice.rs
-////! Control-plane module responsible for the lifecycle of services:
+//! Control-plane module responsible for the lifecycle of services:
 //! - spawn (start)
 //! - monitor health (watch)
 //! - stop (graceful/forced shutdown)
@@ -103,7 +103,7 @@ async fn start_container(
     let container_name = format!("spn_{}", image.replace(|c: char| !c.is_alphanumeric(), "_"));
 
     // Parse options string to configure HostConfig
-    let mut network_mode = Some("spnnet".to_string());
+    let mut network_mode = None;
     let mut binds = Vec::new();
     let mut port_bindings: HashMap<String, Option<Vec<PortBinding>>> = HashMap::new();
     let mut privileged = false;
@@ -171,6 +171,9 @@ async fn start_container(
         cap_add: Some(cap_add),
         ..Default::default()
     };
+
+    tracing::info!("Service HostConfig: {:?}", host_config);
+    tracing::info!("Service Env Vars: {:?}", env_vars);
 
     // 2. Container Config
     let config = ContainerCreateBody {

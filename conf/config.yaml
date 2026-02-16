@@ -130,6 +130,7 @@ realms:
                     image: "provider-auth"
                     command:
                     env:
+                    options: "--network spnnet"
                   provider: urn:chip-in:end-point:hub.master.sr.example.com:auth-server
                   consumers:
                       - urn:chip-in:end-point:hub.master.sr.example.com:auth-gateway
@@ -144,8 +145,10 @@ realms:
                     image: "provider-db"
                     command:
                     env:
+                      POSTGRES_DB: "shopdb"
+                      POSTGRES_USER: "shopuser"
                       POSTGRES_PASSWORD: "mysecretpassword123"
-                    options: "-p 5432:5432"
+                    options: "--network spnnet -p 5432:5432"
                   provider: urn:chip-in:end-point:hub.master.sr.example.com:database-server
                   consumers:
                       - urn:chip-in:end-point:hub.master.sr.example.com:database-client
@@ -154,12 +157,13 @@ realms:
                   title: www service
                   description: Web frontend service for the fruit shop.
                   availabilityManagement:
-                    ondemandStartOnConsumer: true
-                    ondemandStartOnPayload: false
+                    ondemandStartOnConsumer: false
+                    ondemandStartOnPayload: true
                     idleTimeout: 0  # no shutdown
                     image: "provider-www"
                     command:
                     env:
+                    options: "--network spnnet"
                   provider: urn:chip-in:end-point:hub.master.sr.example.com:www-server
                   consumers:
                       - urn:chip-in:end-point:hub.master.sr.example.com:www-gateway
