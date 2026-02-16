@@ -313,6 +313,7 @@ impl Server {
                                                 cn,
                                                 provider_connections,
                                                 service_map,
+                                                shared_config.clone(),
                                             ).run()
                                                 .instrument(info_span!("provider_handler", id = connection_id))
                                                 .await
@@ -395,6 +396,7 @@ impl ProviderHandler {
         cn: String,
         provider_connections: Arc<Mutex<HashMap<String, HashMap<String, quinn::Connection>>>>,
         service_map: Arc<HashMap<String, String>>,
+        _shared_config: Arc<ArcSwap<crate::config::AppConfig>>,
     ) -> Self {
         let now = Utc::now();
         let conn_id = connection.stable_id();
@@ -402,6 +404,23 @@ impl ProviderHandler {
             .get(&cn)
             .cloned()
             .unwrap_or_else(|| "unknown".to_string());
+
+        // set idle timeout by availability management setting
+        //let config = shared_config.load();
+        //if let Some(service_config) = config.realms.iter()
+        //    .flat_map(|r| &r.hubs)
+        //    .flat_map(|h| &h.services)
+        //    .find(|s| s.name == service)
+        //{
+        //    if service_config.availability_management.ondemand_start_on_payload {
+        //        let idle_timeout = service_config.availability_management.idle_timeout;
+        //        if idle_timeout > 0 {
+        //            // connection.set_max_idle_timeout(Some(Duration::from_secs(idle_timeout)));
+        //            warn!("Dynamic idle timeout setting is not supported by the current quinn version");
+        //        }
+        //    }
+        //}
+
         let endpoint_type = "Provider".to_string();
         let context = ConnectionContext {
             connection: connection.clone(),
