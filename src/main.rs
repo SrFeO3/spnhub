@@ -8,7 +8,6 @@
 //
 // TODO:
 //   - replace target provider on cunsumer, re-connected on provider
-//   - FIXME01 on contol session closing behavior
 //   - Refactor utils.rs/create_quic_client_endpoint, which is currently marked as dead_code.
 
 use std::collections::HashMap;
@@ -17,7 +16,6 @@ use std::sync::Arc;
 use arc_swap::ArcSwap;
 use chrono::{DateTime, Utc};
 use clap::Parser;
-use quinn::RecvStream;
 use rustls::crypto::ring::default_provider;
 use tokio::sync::{Mutex, mpsc};
 use tokio::time::{self, Duration, Instant};
@@ -32,7 +30,6 @@ use crate::config::{ConfigHotReloadService, load_initial_config};
 
 const MAX_CONCURRENT_UNI_STREAMS: u8 = 0;
 const KEEP_ALIVE_INTERVAL_SECS: u64 = 50;
-const MAX_IDLE_TIMEOUT_SECS: u64 = 60;
 const DATAGRAM_RECEIVE_BUFFER_SIZE: usize = 1024 * 1024;
 
 #[derive(Parser)]
@@ -455,30 +452,6 @@ impl ProviderHandler {
                 }
             }
         }
-
-        // No main function for data, only wait
-        // but, accept the single control stream from the provider endpoint.
-        // FIXME01: The termination of this control session incorrectly tears down the entire QUIC connection.
-        match self.context.connection.accept_uni().await {
-            Ok(stream) => {
-                info!(
-                    "Provider control stream accepted from '{}'",
-                    self.context.uri
-                );
-                let span = info_span!("control_stream_handler");
-                tokio::spawn(
-                    handle_provider_control_stream(stream, self.context.clone()).instrument(span),
-                );
-            }
-            Err(e) => {
-                // If we fail to get the control stream, we can't proceed.
-                // Log the error and let the connection close naturally.
-                error!(
-                    "Failed to accept provider control stream from '{}': {}. The connection will be closed.",
-                    self.context.uri, e
-                );
-            }
-        };
 
         // Wait for the connection to be closed for any reason. This is the main lifetime of the handler.
         let reason = self.context.connection.closed().await;
@@ -1007,35 +980,6 @@ async fn proxy_consumer_stream_to_provider(
 
     // The streams will be closed automatically when they are dropped.
     Ok(())
-}
-
-/// Handles a single unidirectional control stream from a provider, reading event data and processing it.
-async fn handle_provider_control_stream(mut stream: RecvStream, context: ConnectionContext) {
-    let start_at = Utc::now();
-    let stream_id = stream.id();
-    info!(
-        message = "Stream started",
-        start_at = %start_at,
-        connection_id = context.connection_id,
-        stream_id = %stream_id,
-        endpoint_type = &context.endpoint_type,
-        uri = &context.uri,
-        service = &context.service,
-    );
-
-    // Set a reasonable limit for the event size to prevent memory exhaustion.
-    const MAX_EVENT_SIZE: usize = 1_024 * 1_024; // 1MB
-    match stream.read_to_end(MAX_EVENT_SIZE).await {
-        Ok(data) => {
-            warn!(
-                "Received {} bytes: {}",
-                data.len(),
-                String::from_utf8_lossy(&data)
-            );
-            // Here, you would deserialize and process the event data.
-        }
-        Err(e) => warn!("Failed to read data from stream: {}", e),
-    }
 }
 
 /// Logs the details of a connection closure.
