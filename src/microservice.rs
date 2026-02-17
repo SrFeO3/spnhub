@@ -18,8 +18,7 @@
 //! - `start_container`: Starts a container using a Docker image and options.
 //!
 //! ## Notes
-//! - `options` is currently a raw string (e.g., `"--detach --rm --name svc-a -p 8080:80"`).
-//!   A typed builder pattern is planned to avoid shell-arg pitfalls and injection risks.
+//! - `options` is a list of strings (e.g., `["-p", "8080:80"]`).
 //! - Health monitoring and stop APIs are pending implementation.
 
 use std::collections::HashMap;
@@ -66,7 +65,7 @@ impl From<Error> for StartError {
 ///
 /// # Arguments
 /// - `image`: Docker image tag/name (e.g., `"nginx:1.25"`).
-/// - `options`: Docker CLI-like options string (e.g., `"-p 8080:80 --network host"`).
+/// - `options`: List of Docker CLI-like options (e.g., `["-p", "8080:80", "--network", "host"]`).
 /// - `env`: Optional map of environment variables.
 ///
 /// # Example Configuration (YAML)
@@ -74,7 +73,7 @@ impl From<Error> for StartError {
 /// ```yaml
 /// availabilityManagement:
 ///   image: "nginx:1.25"
-///   options: "-p 8080:80 --network host"
+///   options: ["-p", "8080:80", "--network", "host"]
 ///   env:
 ///     API_KEY: "secret"
 ///     DEBUG: "true"
@@ -92,31 +91,27 @@ impl From<Error> for StartError {
 /// ```
 async fn start_container(
     image: &str,
-    options: &str,
+    options: &[String],
     env: Option<&HashMap<String, String>>,
 ) -> Result<ContainerHandle, StartError> {
-    tracing::info!(
-        "Starting container for image: {} with options: {}",
-        image,
-        options
-    );
+    tracing::info!("Starting container for image: {} with options: {:?}", image, options);
 
     let docker = Docker::connect_with_local_defaults()?;
 
     // Generate a dedicated container name (e.g., "nginx:latest" -> "spn_nginx_latest")
     let container_name = format!("spn_{}", image.replace(|c: char| !c.is_alphanumeric(), "_"));
 
-    // Parse options string to configure HostConfig
+    // Parse options list to configure HostConfig
     let mut network_mode = None;
     let mut binds = Vec::new();
     let mut port_bindings: HashMap<String, Option<Vec<PortBinding>>> = HashMap::new();
     let mut privileged = false;
     let mut cap_add = Vec::new();
 
-    let parts: Vec<&str> = options.split_whitespace().collect();
+    let parts = options;
     let mut i = 0;
     while i < parts.len() {
-        match parts[i] {
+        match parts[i].as_str() {
             "-p" | "--publish" => {
                 if i + 1 < parts.len() {
                     // Simple parser for host_port:container_port
@@ -251,7 +246,7 @@ pub async fn start_provider(
 ) -> Result<ContainerHandle, StartError> {
     let result = start_container(
         &config.image,
-        config.options.as_deref().unwrap_or(""),
+        config.options.as_deref().unwrap_or(&[]),
         config.env.as_ref(),
     )
     .await;

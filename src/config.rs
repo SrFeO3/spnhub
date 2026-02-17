@@ -157,13 +157,17 @@ pub struct ServiceConfig {
 #[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct AvailabilityManagementConfig {
+    pub _service_id: String,
+    pub _cluster_manager_urn: Option<String>,
+    pub _start_at: Option<String>,
+    pub _stop_at: Option<String>,
     pub ondemand_start_on_consumer: bool,
     pub ondemand_start_on_payload: bool,
     pub _idle_timeout: u64,
     pub image: String,
     pub _command: Option<String>,
     pub env: Option<HashMap<String, String>>,
-    pub options: Option<String>,
+    pub options: Option<Vec<String>>,
 }
 
 /// Service that monitors configuration file changes and applies them

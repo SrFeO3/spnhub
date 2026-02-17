@@ -110,12 +110,21 @@ realms:
                   title: api service
                   description: API service for retrieving fruit product data.
                   availabilityManagement:
+                    serviceId: "provider-api"
+                    clusterManagerUrn: "preconfigured-local-development-Docker-environment-only"
+                    description: "delayed startup triggered by the first payload"
                     ondemandStartOnConsumer: false
                     ondemandStartOnPayload: true
                     idleTimeout: 0  # no shutdown
                     image: "provider-api"
                     command:
+                    options: ["--network", "spnnet"]
                     env:
+                      DATABASE_URL: "postgres://shopuser:myShopPwABC@127.0.0.1:8432/shopdb"
+                      OIDC_ISSUER_URL_INTERNAL: "http://authserver:8082"
+                      OIDC_ISSUER_URL_EXTERNAL: "http://localhost:8082"
+                      CORS_ALLOWED_ORIGINS: "http://localhost:8080"
+                      SERVER_ADDRESS: "0.0.0.0:8000"
                   provider: urn:chip-in:end-point:hub.master.sr.example.com:api-server
                   consumers:
                       - urn:chip-in:end-point:hub.master.sr.example.com:api-gateway
@@ -124,13 +133,18 @@ realms:
                   title: auth service
                   description: OpenID Connect (OIDC) authentication service.
                   availabilityManagement:
+                    serviceId: "provider-auth"
+                    clusterManagerUrn: "preconfigured-local-development-Docker-environment-only"
+                    description: "auto startup triggered when the consumer is ready"
+                    startAt: "not-implemented"
+                    stopAt: "not-implemented"
                     ondemandStartOnConsumer: true
-                    ondemandStartOnPayload: false
+                    ondemandStartOnPayload: true
                     idleTimeout: 0  # no shutdown
                     image: "provider-auth"
                     command:
+                    options: ["--network", "spnnet"]
                     env:
-                    options: "--network spnnet"
                   provider: urn:chip-in:end-point:hub.master.sr.example.com:auth-server
                   consumers:
                       - urn:chip-in:end-point:hub.master.sr.example.com:auth-gateway
@@ -139,16 +153,21 @@ realms:
                   title: database service
                   description: Database service for the fruit shop.
                   availabilityManagement:
+                    serviceId: "provider-db"
+                    clusterManagerUrn: "preconfigured-local-development-Docker-environment-only"
+                    description: "auto startup triggered when the consumer is ready"
+                    startAt: "not-implemented"
+                    stopAt: "not-implemented"
                     ondemandStartOnConsumer: true
-                    ondemandStartOnPayload: false
+                    ondemandStartOnPayload: true
                     idleTimeout: 0  # no shutdown
                     image: "provider-db"
                     command:
+                    options: ["--network", "spnnet"]
                     env:
                       POSTGRES_DB: "shopdb"
                       POSTGRES_USER: "shopuser"
-                      POSTGRES_PASSWORD: "mysecretpassword123"
-                    options: "--network spnnet -p 5432:5432"
+                      POSTGRES_PASSWORD: "myShopPwABC"
                   provider: urn:chip-in:end-point:hub.master.sr.example.com:database-server
                   consumers:
                       - urn:chip-in:end-point:hub.master.sr.example.com:database-client
@@ -157,13 +176,18 @@ realms:
                   title: www service
                   description: Web frontend service for the fruit shop.
                   availabilityManagement:
+                    serviceId: "provider-www"
+                    clusterManagerUrn: "preconfigured-local-development-Docker-environment-only"
+                    description: "delayed startup triggered by the first payload"
+                    startAt: "not-implemented"
+                    stopAt: "not-implemented"
                     ondemandStartOnConsumer: false
                     ondemandStartOnPayload: true
                     idleTimeout: 0  # no shutdown
                     image: "provider-www"
                     command:
+                    options: ["--network", "spnnet"]
                     env:
-                    options: "--network spnnet"
                   provider: urn:chip-in:end-point:hub.master.sr.example.com:www-server
                   consumers:
                       - urn:chip-in:end-point:hub.master.sr.example.com:www-gateway
@@ -293,11 +317,17 @@ realms:
                   title: api service
                   description: API service for retrieving fruit product data.
                   availabilityManagement:
-                    ondemandStartOnConsumer: true
-                    ondemandStartOnPayload: false
+                    serviceId: "svr-api"
+                    clusterManagerUrn: "preconfigured-local-development-Docker-environment-only"
+                    description: "delayed startup triggered by the first payload"
+                    startAt: "not-implemented"
+                    stopAt: "not-implemented"
+                    ondemandStartOnConsumer: false
+                    ondemandStartOnPayload: true
                     idleTimeout: 0  # no shutdown
                     image: "svr-api"
                     command:
+                    options:
                     env:
                   provider: urn:chip-in:end-point:hub.master.dev.example.com:api-server
                   consumers:
@@ -307,11 +337,17 @@ realms:
                   title: auth service
                   description: OpenID Connect (OIDC) authentication service.
                   availabilityManagement:
+                    serviceId: "svr-auth"
+                    clusterManagerUrn: "preconfigured-local-development-Docker-environment-only"
+                    description: "auto startup triggered when the consumer is ready"
+                    startAt: "not-implemented"
+                    stopAt: "not-implemented"
                     ondemandStartOnConsumer: true
-                    ondemandStartOnPayload: false
+                    ondemandStartOnPayload: true
                     idleTimeout: 0  # no shutdown
                     image: "svr-auth"
                     command:
+                    options:
                     env:
                   provider: urn:chip-in:end-point:hub.master.dev.example.com:auth-server
                   consumers:
