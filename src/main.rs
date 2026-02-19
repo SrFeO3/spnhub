@@ -339,7 +339,7 @@ impl Server {
             .num_alive_tasks();
 
         info!(
-            message = "Server Stats",
+            message = "Stats",
             total_connections = provider_count + consumer_count,
             tokio_workers,
             tokio_tasks,
@@ -357,7 +357,7 @@ impl Server {
                 id = conn.stable_id(),
                 rtt_ms = stats.path.rtt.as_millis(),
                 lost_packets = stats.path.lost_packets,
-                " - Provider connection stats"
+                " -Provider"
             );
         }
 
@@ -371,7 +371,7 @@ impl Server {
                 id = conn.stable_id(),
                 rtt_ms = stats.path.rtt.as_millis(),
                 lost_packets = stats.path.lost_packets,
-                " - Consumer connection stats"
+                " -Consumer"
             );
         }
     }
