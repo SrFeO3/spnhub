@@ -1,130 +1,552 @@
 realms:
-    - name: production_realm
-      title: ショップシステム
-      description: Realm for the production environment.
-      signingKey: |
-            -----BEGIN PUBLIC KEY-----
-            -----END PUBLIC KEY-----
-      signingKey: |
-            -----BEGIN PRIVATE KEY-----
-            -----END PRIVATE KEY-----
+    - name: forge
+      urn: "urn:chip-in:realm:forge"
+      title: テスト鍛錬用ショップシステム
+      description: Realm for the forge environment.
+      deviceIdVerificationKey: |
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA96yON3DXHHS7DMfe4h1W
+          VSyRJI/mkrKNgDmIboIGYYNcBALMblC3IRgE9gEpaGJ1Ll+At5yl4UF90iru+4Kr
+          /bPRRjnCUBIyBztX7TcRPlbH4zfvYHx9vJtUuckVELwzmVz5T1K6UgbXQOZv96Y6
+          PNcBnrc/M0zW7GWIqcktEMuSdcMlYdJ8VJYNA4sfpSQLJfZI+j964tjoVhr2JNsi
+          kInG6TZmNBjjPSqFtDzTLxC12ngxJQDUuN1IRqAcSchjWMFwY67voVpS39u2nFVj
+          rbnHFMU8bkmTF3WizL+6ZPKPU28+WrYxH4EIEhToyIhktCb9DSKUSiIGa6+KvpfN
+          ywIDAQAB
+          -----END PUBLIC KEY-----
+      deviceIdSigningKey: |
+          -----BEGIN PRIVATE KEY-----
+          MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQD3rI43cNccdLsM
+          x97iHVZVLJEkj+aSso2AOYhuggZhg1wEAsxuULchGAT2ASloYnUuX4C3nKXhQX3S
+          Ku77gqv9s9FGOcJQEjIHO1ftNxE+VsfjN+9gfH28m1S5yRUQvDOZXPlPUrpSBtdA
+          5m/3pjo81wGetz8zTNbsZYipyS0Qy5J1wyVh0nxUlg0Dix+lJAsl9kj6P3ri2OhW
+          GvYk2yKQicbpNmY0GOM9KoW0PNMvELXaeDElANS43UhGoBxJyGNYwXBjru+hWlLf
+          27acVWOtuccUxTxuSZMXdaLMv7pk8o9Tbz5atjEfgQgSFOjIiGS0Jv0NIpRKIgZr
+          r4q+l83LAgMBAAECggEALuPI0v82gokpBozqigWC3EJBQlpKDVjniDCcP0u3mIuN
+          hqbe/D2kxgutmMN0ivIk/EARdvGdyA0lnH4LW6uME06RXsm9m3ouZYcbKOplhddZ
+          JY/n7mzzQxtnSXsj1VTEMhNTkex4IOJxqzRVW13ppa4Q/PL1cKlqATxhyL8xHH4G
+          pmq8Q899T7OW7vLdysede68sjbA04fL/gaPNxPj5TpsPKvreIQRpziXDoJCalMp9
+          EUi0CbzpoVheahJlSi6In9byRxGauVIao+BgNh/NNYqVnj/Tp6X2YGnhN5UXYA+j
+          V4xMjmKFgHIFaptpUTudpyAZZnG/WQVKJDeixhscaQKBgQD9MpJw0cgLhRenwL0V
+          zJeMlt1OwnA4sbbmxUS67eAy31cZzUS6N2cF+2RaP0WjGSnZyxcXPA72HXnM8/dP
+          B5tX6ce9PJ0px7YtOnwwcjGMKqQsPALF9Uvm5FfuWlCdHaHzfUv2wUGS8ON6cJDW
+          qgufBrMynmtw8ZG1Wr+5MIiRgwKBgQD6alUzZrAJOwM/IYdIte3YISx4a69j0epc
+          Vh7Bzm3tQYF02nSFpMSKX8sQeQ5wFx4gjhGWJp3tn0xrWrsN44b0oG4zKE9QaRVJ
+          hCzBa/Ka+p/EsXc/kc9CSMuylJ20LtA0B5TEgYJ8QzzCA8BsRUc47+JkR3gO1N9w
+          jS5bPfyIGQKBgQC6f9Kv+UXBfoJDFUvxz6Zdbw6KIdxpVjWj2/BZRDgdILdWkQUr
+          qP1gwaBUfUB8918FRnu2qI1YqbN6zMUAWFkLM27lq80T5kABJpAtWx+13/7XekiM
+          qbcD1nQSZEH2yMnuwP8APa9gXcEhAeMdy1kOBPBfu6LmKXmrPLH15ZLiowKBgDgO
+          u7oA/+FhG43zZISLbY4XhwwCF0ZCRLOc98+s9YDKTD+rc7BDPVg4r42le+ztz+m7
+          xAYX6Py7z3Cs4/js+VYj3+eF25OFoqVNeHNoRewZtNBkZeyOKJaPE0KL8G3YmPU8
+          yTngQCSvLJfGHTpfm90MHmMSeLbhQo/AmyMD0ldpAoGBAJ9tQ3R33AYkkjCJSc/u
+          8X121N2+URZxuA23bMJH6OoJddtz8AFyKV36ihbVKrJ1/mcXkdZ9+WEszQaVsGsm
+          CvsxaZWlMj4yZoVCx7ZqrFx17AThlxCpi7rFoFZbkk+M9+RX6U8d8r39qyfqjJFp
+          0kaUPHgv1Qgvn5SYcebU+AQ4
+          -----END PRIVATE KEY-----
       cacert: |
-            -----BEGIN CERTIFICATE-----
-            MIIDmTCCAoGgAwIBAgIUQFlH+y76TW4GCwvGWEESfT4sTZAwDQYJKoZIhvcNAQEL
-            BQAwXDELMAkGA1UEBhMCSlAxDjAMBgNVBAgMBVRva3lvMQ0wCwYDVQQHDARVZW5v
-            MRQwEgYDVQQKDAtUZXN0U2VydmljZTEYMBYGA1UEAwwPTXlUZXN0U2VydmljZUNB
-            MB4XDTI1MDkyNDA1NDkzNFoXDTM1MDkyMjA1NDkzNFowXDELMAkGA1UEBhMCSlAx
-            DjAMBgNVBAgMBVRva3lvMQ0wCwYDVQQHDARVZW5vMRQwEgYDVQQKDAtUZXN0U2Vy
-            dmljZTEYMBYGA1UEAwwPTXlUZXN0U2VydmljZUNBMIIBIjANBgkqhkiG9w0BAQEF
-            AAOCAQ8AMIIBCgKCAQEAvqP7GuNgv5umIIXK+QqT2auq56x1oSAA+oP4Fmp+sjcO
-            e08QES/LlbXesVRYHHV624qInpdEKTwuENxZi0+mkm5zO09GFlQiKvas3YvN5Ecq
-            aWVoPWHezcXt2K+ogNU1rjPqgENvpKnWtzZPGIHiKnN0/taUR7AotxPg4wV1QVuv
-            EgavXqIFGBhH+Os+6HnCls3XukmMBu3YTxgB6wwYUHbXqzBQNivugXU1AFx1a7tI
-            GRCGEAJiJ//g1mTu8Ji2/XvN/QpkSv5GgjwDToB07ZvRNSOarODOwT37Fr87Nfy1
-            IpIGcmbNcpJik+LNqpyfdUALuLyXAbjjYw7OML9HqwIDAQABo1MwUTAdBgNVHQ4E
-            FgQUKazWF2yeXfg6aTVhYFwTyT3idPQwHwYDVR0jBBgwFoAUKazWF2yeXfg6aTVh
-            YFwTyT3idPQwDwYDVR0TAQH/BAUwAwEB/zANBgkqhkiG9w0BAQsFAAOCAQEAa9Qc
-            TEzjkbIWczZ1h9xDriG8RcST0pmdTR2QMo/UeaJayNjtxp9rEuNVW8Xs7COENtPv
-            wfq/X3RLXh+YBYT2qC0qO1HuAoLOHchxKMEJBJo1QjVkNmJHtIq6sddzm16EmW0o
-            jz2dN3fp1S9PvLwKha8YOMX1R9eiwT7UHAXJjOud6xdF6T8veDvhrFKTsKxgKFkG
-            NoUiNw+rzOVCOuwgt1I7VcfIgA0dmjDz3RlK1nPXroZaeMKgLEAyLPh704h8vvDT
-            ZHgx+Nrf1b+TNgNLxpnmqFH4NWdezFSfvHHRBOY3sFvMJFU81fnk3QTZYnRwrsSD
-            M7eKGakIiHjPZDWOEg==
-            -----END CERTIFICATE-----
+          -----BEGIN CERTIFICATE-----
+          MIIDmTCCAoGgAwIBAgIUQFlH+y76TW4GCwvGWEESfT4sTZAwDQYJKoZIhvcNAQEL
+          BQAwXDELMAkGA1UEBhMCSlAxDjAMBgNVBAgMBVRva3lvMQ0wCwYDVQQHDARVZW5v
+          MRQwEgYDVQQKDAtUZXN0U2VydmljZTEYMBYGA1UEAwwPTXlUZXN0U2VydmljZUNB
+          MB4XDTI1MDkyNDA1NDkzNFoXDTM1MDkyMjA1NDkzNFowXDELMAkGA1UEBhMCSlAx
+          DjAMBgNVBAgMBVRva3lvMQ0wCwYDVQQHDARVZW5vMRQwEgYDVQQKDAtUZXN0U2Vy
+          dmljZTEYMBYGA1UEAwwPTXlUZXN0U2VydmljZUNBMIIBIjANBgkqhkiG9w0BAQEF
+          AAOCAQ8AMIIBCgKCAQEAvqP7GuNgv5umIIXK+QqT2auq56x1oSAA+oP4Fmp+sjcO
+          e08QES/LlbXesVRYHHV624qInpdEKTwuENxZi0+mkm5zO09GFlQiKvas3YvN5Ecq
+          aWVoPWHezcXt2K+ogNU1rjPqgENvpKnWtzZPGIHiKnN0/taUR7AotxPg4wV1QVuv
+          EgavXqIFGBhH+Os+6HnCls3XukmMBu3YTxgB6wwYUHbXqzBQNivugXU1AFx1a7tI
+          GRCGEAJiJ//g1mTu8Ji2/XvN/QpkSv5GgjwDToB07ZvRNSOarODOwT37Fr87Nfy1
+          IpIGcmbNcpJik+LNqpyfdUALuLyXAbjjYw7OML9HqwIDAQABo1MwUTAdBgNVHQ4E
+          FgQUKazWF2yeXfg6aTVhYFwTyT3idPQwHwYDVR0jBBgwFoAUKazWF2yeXfg6aTVh
+          YFwTyT3idPQwDwYDVR0TAQH/BAUwAwEB/zANBgkqhkiG9w0BAQsFAAOCAQEAa9Qc
+          TEzjkbIWczZ1h9xDriG8RcST0pmdTR2QMo/UeaJayNjtxp9rEuNVW8Xs7COENtPv
+          wfq/X3RLXh+YBYT2qC0qO1HuAoLOHchxKMEJBJo1QjVkNmJHtIq6sddzm16EmW0o
+          jz2dN3fp1S9PvLwKha8YOMX1R9eiwT7UHAXJjOud6xdF6T8veDvhrFKTsKxgKFkG
+          NoUiNw+rzOVCOuwgt1I7VcfIgA0dmjDz3RlK1nPXroZaeMKgLEAyLPh704h8vvDT
+          ZHgx+Nrf1b+TNgNLxpnmqFH4NWdezFSfvHHRBOY3sFvMJFU81fnk3QTZYnRwrsSD
+          M7eKGakIiHjPZDWOEg==
+          -----END CERTIFICATE-----
       sessionTimeout: 2592000
       administrators:
           - admin1@example.com
           - admin2@example.com
+      expiredAt: "not-implemented"
+      disabled: false
       zones:
-          - name: sr.example.com
-            title: Shop zone sr.example.com
-            description: DNS zone configuration for the shop.
+          - name: test.example.com
+            urn: "urn:chip-in:zone:forge:test.example.com"
+            title: Shop zone test.example.com
+            description: DNS zone configuration for the forge shop.
             dnsProvider:
             acmeCertificateProvider:
             subdomains:
+                - name: www
+                  urn: "urn:chip-in:subdomain:forge:test.example.com:www"
+                  title: www
+                  description: Subdomain configuration for 'www'.
+                  fqdn: www.test.example.com
+                - name: auth
+                  urn: "urn:chip-in:subdomain:forge:test.example.com:auth"
+                  title: auth
+                  description: Subdomain configuration for 'auth'.
+                  fqdn: auth.test.example.com
+                - name: api
+                  urn: "urn:chip-in:subdomain:forge:test.example.com:api"
+                  title: api
+                  description: Subdomain configuration for 'api'.
+                  fqdn: api.test.example.com
+                - name: check
+                  urn: "urn:chip-in:subdomain:forge:test.example.com:check"
+                  title: check
+                  description: Subdomain configuration for 'check'.
+                  fqdn: check.test.example.com
                 - name: sirius
+                  urn: "urn:chip-in:subdomain:forge:test.example.com:sirius"
                   title: sirius
                   description: Subdomain configuration for 'sirius'.
+                  fqdn: sirius.test.example.com
+      virtualHosts:
+          - name: "www"
+            depriciated-hostname: "www.test.example.com"
+            description: Virtual host configuration for the shop website.
+            subdomain: "urn:chip-in:subdomain:forge:test.example.com:www"
+            certificate: |
+                -----BEGIN CERTIFICATE-----
+                MIIDlTCCAn2gAwIBAgIUOCU9p0Z5rkJksIl9EuEW5H+UFZEwDQYJKoZIhvcNAQEL
+                BQAwVjELMAkGA1UEBhMCSlAxDjAMBgNVBAgMBVRva3lvMQ0wCwYDVQQHDARVZW5v
+                MRIwEAYDVQQKDAlGb3JnZVNob3AxFDASBgNVBAMMC1Rlc3RGb3JnZUNBMB4XDTI2
+                MDIxOTAwMzMwM1oXDTM2MDIxNzAwMzMwM1owTjELMAkGA1UEBhMCSlAxDjAMBgNV
+                BAgMBVRva3lvMQ0wCwYDVQQHDARVZW5vMRIwEAYDVQQKDAlGb3JnZVNob3AxDDAK
+                BgNVBAMMA3d3dzCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAPgADM6u
+                STz2iE4V3j0rk82k5WSE3HzZ/LTIouC37Up+PyE7fvzmQpfaO7eADvbzmZJbBkqU
+                zyIioT7iCcZOcokvZGyfFpfvTW0qtYlZ06xGY4bKlVcoFntj7EsjZHQER5vf9x7Y
+                nG/l6BhUCZ089/ZHDgVhjVsamdEgpibnMJBeJaRmfMBN1VatblOGQncVXyCWEkNO
+                KkWrXDxvzVtlERYcJK0BZ3fR/sftsGS1am1VJgBHRgK02rXlDceZaVGGTXJ1Ge4w
+                9Vb4EgJUoyhnxBe/Lqn1+sF5+fQWU9NwyOZOY+/FCU3oNHDhpf1/b58orVhSH1vt
+                WqTqUID8MvivVt0CAwEAAaNjMGEwHwYDVR0RBBgwFoIUd3d3LnRlc3QuZXhhbXBs
+                ZS5jb20wHQYDVR0OBBYEFNwyblnHZK7oF2ZdJLThLL7hnZ69MB8GA1UdIwQYMBaA
+                FEYD1PUSu0sqtzBwgJQ4Nr37GBL6MA0GCSqGSIb3DQEBCwUAA4IBAQBkHTXTxIOg
+                hzXaWL2IKja/f0ZEnNaioFbhFbx4x8GuSJhoxT74xNLCKt2PNxEoM94qYArbRTUw
+                +BYbAKTlZdgQnfCuzXn6Ovjjh7qEyKuVjhlX6fz4AsJacW5QCvucozyfq8u1gZKq
+                wDsPjux7yHzLns5KrO/WLOOXIYyHVp+Ua1UmZZW7gFn6Yhw3TifkTgnYv48qzZWy
+                4jFb2YuPizB7IihqOWpEuAoS61YnfwkgMIkO7bsHwwmAHBXZCIvKDrA6pvLgKve/
+                mByZQOa+MvrcAx6n5JSgbpNTGKuww8mpqTMgOW7euI1T7jelsbA3u0araj6aA/J3
+                aUsdBfyfUZK3
+                -----END CERTIFICATE-----
+            key: |
+                -----BEGIN PRIVATE KEY-----
+                MIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQD4AAzOrkk89ohO
+                Fd49K5PNpOVkhNx82fy0yKLgt+1Kfj8hO3785kKX2ju3gA7285mSWwZKlM8iIqE+
+                4gnGTnKJL2RsnxaX701tKrWJWdOsRmOGypVXKBZ7Y+xLI2R0BEeb3/ce2Jxv5egY
+                VAmdPPf2Rw4FYY1bGpnRIKYm5zCQXiWkZnzATdVWrW5ThkJ3FV8glhJDTipFq1w8
+                b81bZREWHCStAWd30f7H7bBktWptVSYAR0YCtNq15Q3HmWlRhk1ydRnuMPVW+BIC
+                VKMoZ8QXvy6p9frBefn0FlPTcMjmTmPvxQlN6DRw4aX9f2+fKK1YUh9b7Vqk6lCA
+                /DL4r1bdAgMBAAECggEAC3yEcKyHBQfodhtnr3QdqfxC9ACpA1myWBTkjF11zrSM
+                YSeTtmFw1f6G3l/T8ZwEnHrS+VstQSgS8/9n/f4YqndzjTS3c8KNlr/laBmXvFEx
+                9Lvce7dbhowGf/rBQT6zKrT5HxM1IwP7l72JXiBv3gGE/0/5H4OFeneVZ9RfPgnI
+                Qyfc60LNRmaODihfyd1c+dB8x2BOpSq6ysjpvNJef48Ve2ZpfQt3URtbkuqI1ZTT
+                IeEqXYidVxxfQ9k1bq04p7BOQER7ZX1TzlIJpOrjNYhtiUBLi1PPUa1Pp8kA9hC3
+                RoOku20FQZassddZT9rkkdJhRS8zRELNZgzSMsxVMQKBgQD/wALXx9FUAry+OM36
+                AimdDzP4HbHyFOjdkak8dDv0cltwi5MmPoMsrNDKchbKPbsvGZWknwsWpecNeCHt
+                x0oeLxQTSVGafO3zjpA8v9DIXVTxHBYVoccaL7FHpJgD/CBg2qtgZP3UmLm/afjI
+                SaaKHXYCNXLZi65FGislcO7aMQKBgQD4PhmTWQGZ38lR6pjbk+UsDvDFxYOltk/e
+                iWcdbpHeD2VVmK+iBqyJ4OtSD0HXFkeZBB3dPPthVxsoSfkSZQWueRzJrP+ZqFa2
+                /hgbsGv13cwSx6cx91kyXOwoGQEBb26w/tPvFkSUSw7HgOefPdH/aRTEWCYdUPnX
+                De8s8zdwbQKBgHgrdqqBX2CEML+I3W/d2EPOQvMQsO442PpTWRvo2csQeNq3Gptb
+                wDMbuLeHSCIbQ3rsIJ5LhOBNb/WqPvcFL1RjdqFhUBCxJvXMRQXmc2nSQPlR4yai
+                73Tkd/5b3nnw3B3mYaRXj9V3NcA1QQqLYM+A7FQ5XQ/PTEF3/FIJcJHhAoGAI+O+
+                iNoObDO5hHlZXi2UrXj/gGhc7yFbjL3qxYuN1T/+k5B+m/tBCLIW84c3KqSS92Fr
+                ++dsJJeWWo3PT8SBPMdPzSyQy6NV3iEAVUh9Y0+MyI5K8uNi5vAeSHHM/msg4sAE
+                3gUnJxVu7pMJabFjYfzMPtLLt+NUK65dDO+g7UUCgYAOhj/MYB7emuSwLAL7g5PQ
+                mMT6QP8aLEzCiTlM3134Yu8Py/N5/5wbOvRgfmqbekHTyMEj85hiY6aGftB8P6YX
+                2yfHBuPssaRJvB7vRc13ssZ33g4O/qVK7KZYoQhBBkYcnwglYgg8j+4EuW3mHyVP
+                Zy3FId4yivtajMUu865euw==
+                -----END PRIVATE KEY-----
+          - name: "auth"
+            depriciated-hostname: "auth.test.example.com"
+            description: Virtual host configuration for the auth website.
+            subdomain: "urn:chip-in:subdomain:forge:test.example.com:auth"
+            certificate: |
+                -----BEGIN CERTIFICATE-----
+                MIIDlzCCAn+gAwIBAgIUOCU9p0Z5rkJksIl9EuEW5H+UFZIwDQYJKoZIhvcNAQEL
+                BQAwVjELMAkGA1UEBhMCSlAxDjAMBgNVBAgMBVRva3lvMQ0wCwYDVQQHDARVZW5v
+                MRIwEAYDVQQKDAlGb3JnZVNob3AxFDASBgNVBAMMC1Rlc3RGb3JnZUNBMB4XDTI2
+                MDIxOTAwMzMwM1oXDTM2MDIxNzAwMzMwM1owTzELMAkGA1UEBhMCSlAxDjAMBgNV
+                BAgMBVRva3lvMQ0wCwYDVQQHDARVZW5vMRIwEAYDVQQKDAlGb3JnZVNob3AxDTAL
+                BgNVBAMMBGF1dGgwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQChyhta
+                DXei22t0gGu8Au5P+FgBNilEzpecYqgsC4XL18uYfrUK2EWpEROi7vt30E2wW8do
+                AR7WApZjYoeY19YINSVgRg+mzHZyfPbV3U+iI7Fu+mhmcFXLCsGf+RXiPhAdHwzG
+                S/I53Z+BOrCugJQBSHDifgko5tyMoUDu7B5Qxavvm7ONNxPmShsf8Gyz492t/kFc
+                o/s2hOJOLNoZWbxCGqVdQsl0P3wjyLWSBSyBcM66vDpfjGyC8tAYTz7aUw+utT1q
+                Tgn676vcSn8KgkbNvUWFywaw5LUjBWJ0zaoa8rKe2kvBo09/QiZUgn1Uzr4DWI9z
+                or5ffD/hdQxxXZp9AgMBAAGjZDBiMCAGA1UdEQQZMBeCFWF1dGgudGVzdC5leGFt
+                cGxlLmNvbTAdBgNVHQ4EFgQUNZieHAqnvS2BMELB2rbS+bxSulYwHwYDVR0jBBgw
+                FoAURgPU9RK7Syq3MHCAlDg2vfsYEvowDQYJKoZIhvcNAQELBQADggEBABqu9jBa
+                Twqm6NSz344lnFOVrzJmwlkZhzCCV8fTeIVAfG0CMg8lm/fSwfod5ZheRkSqAf40
+                OsMev8yKw7eJ9AJpvmvSU30RfO11du2itEnOaqDOG+j8/5xDV+MA9Vhy4KJ8OwPk
+                PFaTjamX/3ekJ0NkOMHxNXyYw6OOLCR4QPF/GlYr2YSsNH9fm8sy9SJ9AzV+Nptr
+                Q+u9dLSZl4Afdpv4w4mw8ofbsQkSJIshoIXks6dqtPylAkkpI5x+zz8uz0M52RIh
+                KKUIs87cK+Gfg1uAd4bR2sXLzlU7Niu07XQkI4I8ker5cWH51LcZtND7d1K2z6T4
+                icMEZg6DgKxEqU0=
+                -----END CERTIFICATE-----
+            key: |
+                -----BEGIN PRIVATE KEY-----
+                MIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQChyhtaDXei22t0
+                gGu8Au5P+FgBNilEzpecYqgsC4XL18uYfrUK2EWpEROi7vt30E2wW8doAR7WApZj
+                YoeY19YINSVgRg+mzHZyfPbV3U+iI7Fu+mhmcFXLCsGf+RXiPhAdHwzGS/I53Z+B
+                OrCugJQBSHDifgko5tyMoUDu7B5Qxavvm7ONNxPmShsf8Gyz492t/kFco/s2hOJO
+                LNoZWbxCGqVdQsl0P3wjyLWSBSyBcM66vDpfjGyC8tAYTz7aUw+utT1qTgn676vc
+                Sn8KgkbNvUWFywaw5LUjBWJ0zaoa8rKe2kvBo09/QiZUgn1Uzr4DWI9zor5ffD/h
+                dQxxXZp9AgMBAAECggEAAPq8/ybROFhtNluXq1/2KuBFQh6ekdbRVqZHP9sDAJiq
+                GB5+QJZOF6etj4E0XwWRDtYDZ0cIdYG3ANuGGCAIYOzXcNWDvz4CIo/Mm79W/dOK
+                /bHA44vfDRdf1DTZE9FN3itDs8ieawjDMDBXhPrsynQykMB0FD4PjD9mqfuedF03
+                hiL6EhMBHQee0URQOW5dFKf8LeScfuRdC3+K7J52JeBvaw1FhjAWVI9//Mh8fBvU
+                Yu2Q8Pnm67Y+JsAZCkOOpteTDmfchC+XchyhFAQaZEzOMqwgshbvGH/YbxaKDxEp
+                erLyqW5yrznOaO7vFrl3Q/a+qnTZnnF7ouT07JBQaQKBgQDODgr1Ji/xkO8+PxQ/
+                j9mVDEGhtgFq9Qvjfpnyxc1SomLMh0z54onVvsUNGw8mPvOWn1lWXZ4AXJckBvox
+                bsTGwPjF5H/vNOIGcgpcsPzgpjM5bdyzNRR/DUvcwinuLnTVvpsi8bI4dxpfmPk/
+                6zTISuCAXVm0t0ulLgAX/ro9uQKBgQDJAVfUJXzFEufJHCNR7FTNN2QCSlbRvubj
+                ei8aMjsZ4SgXHCtRILhha2o4fmX2Y9a/7PWbOqcHQdYx9b+nE71xKPPcrWEb3082
+                8oJ4t+6iEC7odUfwTHc1pNhgJ8S1Pc+eDfHR8ZW2ngTYe8IByWJ5t9EuFxTiwM39
+                /Hh1pPmE5QKBgGgLZzUKJ0NO7776kvrVZASCv9Er2eNsAKjKkGmpv1dub3zfBNtY
+                rEiln1JSy3+AYfc4Vx/o/ZMpLZgffc3gJLRHVFZ4XrEmfsrKYrkTFV1KDqt88ef7
+                cXIGALxjvlBqXMxhBmzKpjckzMhgsdq4pVpNlLa8bEN4GlY5uAplsRzhAoGABg3q
+                TVOLvIvjO2WDktYhf8TpWEBQ+SRc5AEsJgfZS+BCSt/oVhs8MoL/wg/cll1PfJxw
+                kWpk2Y0cHIkgarHnhN8M6Vq3kBVb13XahDRWFb+TCiFuN0i2VoFOmybXf/YKqOIW
+                pJI4RjXgQ30GzPL56lylClRbprDUA5B1OGXtthkCgYAXdMf9uLqGTt223vJL58jJ
+                +bsdBxfmv2mPcv4h2z1DExf53CxiS2n6v3dKQutxYq7637y8f/UX2I9dlbQPMa3G
+                29rG+qf3EFRtwHBQDehaIKPmJHLyiwb7FtPK+M+56DYJ9I5TnhasYGsxelXchkIK
+                +pIGSqXKXQUqM0rZoMUGQw==
+                -----END PRIVATE KEY-----
+          - name: "api"
+            depriciated-hostname: "api.test.example.com"
+            description: Virtual host configuration for the api server.
+            subdomain: "urn:chip-in:subdomain:forge:test.example.com:api"
+            certificate: |
+                -----BEGIN CERTIFICATE-----
+                MIIDlTCCAn2gAwIBAgIUOCU9p0Z5rkJksIl9EuEW5H+UFZMwDQYJKoZIhvcNAQEL
+                BQAwVjELMAkGA1UEBhMCSlAxDjAMBgNVBAgMBVRva3lvMQ0wCwYDVQQHDARVZW5v
+                MRIwEAYDVQQKDAlGb3JnZVNob3AxFDASBgNVBAMMC1Rlc3RGb3JnZUNBMB4XDTI2
+                MDIxOTAwMzMwM1oXDTM2MDIxNzAwMzMwM1owTjELMAkGA1UEBhMCSlAxDjAMBgNV
+                BAgMBVRva3lvMQ0wCwYDVQQHDARVZW5vMRIwEAYDVQQKDAlGb3JnZVNob3AxDDAK
+                BgNVBAMMA2FwaTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAMAmxtyb
+                X5G8AdM14vAKOEIrTXEuuLBYCTSM9TSyE9hdp389nRRTf+6IIEX81PP3ONN0CgBG
+                2JoTW28X4Bc0IOQc6lTavl/OO1sCK+oPPfVbhg7RkpZtCm2XPE3zBUnH6xwmWCZV
+                tTfjkhZYNCtVawvzCV+D6tVMQ6DcBKPJS+jJ308Pu8tA0pzHZx13/lycqozEsoZn
+                yTWt9WXGjENDJMLPe9xT/FHgOACR97sp4jQzySbWDE0fzlBU+JUq0TuWosjjGi4h
+                m7NDxoF9rTAw7WrUUTmmizqO7O/wd+3oc2pFkEIVcMpNc90MN4qkPzbijDzpvcPK
+                miXjJhrB59O+Ky8CAwEAAaNjMGEwHwYDVR0RBBgwFoIUYXBpLnRlc3QuZXhhbXBs
+                ZS5jb20wHQYDVR0OBBYEFNUsoi6qCrMmR5h92mwyzo4xVREFMB8GA1UdIwQYMBaA
+                FEYD1PUSu0sqtzBwgJQ4Nr37GBL6MA0GCSqGSIb3DQEBCwUAA4IBAQCrJ0S0yQIz
+                B27QSycEN0kdbxqFhb/yqtv1FDkIs060cY1fAg3UOJHnrwjsh6w9UzeIJRZLylMK
+                446mE52NTfM71IbwPbpPeaGEm1uL3DDl+/x/YR6yDZW06nY8g6HwpFcCKceRctrx
+                kyCZ5IcviQkIbR2v3Z/azrfe4ZEqo7VgbgULNdJKbzG6jKpatdxleqzXWNg364Wg
+                AIKZqGJTKur0IuOeuBZiYxeWVMFzQ+3rIcntYAvM9rB1e44RPa/9kLZ1Nua7A4OA
+                m5m4Deh+O3Q2ZAusfd0MUwL6ZpwZYguCW5El+UUF9y94jVQh5eG9Y6sW9n6MZKKG
+                3DNO/pUXx3iQ
+                -----END CERTIFICATE-----
+            key: |
+                -----BEGIN PRIVATE KEY-----
+                MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDAJsbcm1+RvAHT
+                NeLwCjhCK01xLriwWAk0jPU0shPYXad/PZ0UU3/uiCBF/NTz9zjTdAoARtiaE1tv
+                F+AXNCDkHOpU2r5fzjtbAivqDz31W4YO0ZKWbQptlzxN8wVJx+scJlgmVbU345IW
+                WDQrVWsL8wlfg+rVTEOg3ASjyUvoyd9PD7vLQNKcx2cdd/5cnKqMxLKGZ8k1rfVl
+                xoxDQyTCz3vcU/xR4DgAkfe7KeI0M8km1gxNH85QVPiVKtE7lqLI4xouIZuzQ8aB
+                fa0wMO1q1FE5pos6juzv8Hft6HNqRZBCFXDKTXPdDDeKpD824ow86b3Dypol4yYa
+                wefTvisvAgMBAAECggEAIKK1ZeSxz7PJ75CYccKamYp3RcD0t2bMcXN7di7Ethv6
+                Bd92HWytLttJ9/kgRit4KFnuFOvzf//HqM+6TNaau4O5vR3F9cm2RRfSU5exI0of
+                M8ceiZQNkF1+bZLYFBbzdL2CfUhTViG9vzPN8Io6ezYVInbqXL3uQpT76MGYtfnA
+                GbVnFGNU/ntDJjq035U0ftPtydb/+LktxqwKG+0/rsqLqJNklTxDv/oZxclouDj0
+                UThTPnx3qOEqAlmLt1IWy0FnKdHnWR7YssAWDj3tuCUJ34yZiUicrkP2UgCO3qZU
+                s5VhjdMAZPqQnUP7V2gdDmTsTOdLf7cAzoWS3ZTfuQKBgQDopxTk5g6VWv6SeLmW
+                of5XRC9UcLAdic202lpIf0vxt+qeKdhDucWZf0/zNL0zKmol6imyKTH86ajpS00Q
+                AicnTpiE1ogXoHxvi9PpnwdG/rZnZqeZ4aDqWBHw1o0HiJoSL9qECibcdlfJJlmj
+                BFE0Y1lOy1pSYS9n4lz/Dbz90wKBgQDTbzUIBo7eqsStJKqlltSZzBS+bqioHOlq
+                zAID4CGGth10roa73liOK5FSyu8TUlVduwOZWHEjUJ7KvX3ZH4sUC0V9sbsFdteU
+                vmbjRl7wdDHsBMEkl2oFSXOR1R+O8zC9V8y79yDQTP44iEs9erpFO2y5Ky7ucNBX
+                cw4x3DRXtQKBgQDM3gRKJEOHRZ+Sf3h9qpx7X/GFm82Z1TUtInIKEP5hFiElsZdc
+                3AOizTcr5K8OlTTvuimJVzlLir5Q4Rw1EpBDzrQDlZ41n/6zgx/SQ1V3MOiSWRUR
+                Llwyv+bcezGpBqMVjMoRJ5dc32EiIgEgybZwOWP1PKCGlknWYsCdYA2iPQKBgE1s
+                2M+ijyjtAe6hkbfnntzfBe2iWjKNu9A2+rnulnhdMjYrPv2G84jEXYgi9h9uNAKJ
+                3EyIPY4AFNYLRA2BZo2lfwIDVogut80pWEX73AJTmoBiUVQT+mgLOL37fH39giik
+                AT4HxkVhHGsZRewyiAmYND0umhYIy9JqOJV7nNNNAoGASthPcSo/9TqVV1P7EdbC
+                PV8gW0VCSRj5lo6h/PuvlZ5MsND5ykjUWe7j0GdN8FIBJclKu0EZGH6L/VeKmGXI
+                +ncHZJqggQd80UZ2UCTltQTbufi1TD0PLug5Axcpv6nrmvIjWGV1PB/gPJCw68BU
+                t8lPOJeNU9q7aZP8lFgBCQ4=
+                -----END PRIVATE KEY-----
+          - name: "check"
+            depriciated-hostname: "check.test.example.com"
+            description: Virtual host configuration for the check website.
+            subdomain: "urn:chip-in:subdomain:forge:test.example.com:check"
+            certificate: |
+                -----BEGIN CERTIFICATE-----
+                MIIDmTCCAoGgAwIBAgIUOCU9p0Z5rkJksIl9EuEW5H+UFZQwDQYJKoZIhvcNAQEL
+                BQAwVjELMAkGA1UEBhMCSlAxDjAMBgNVBAgMBVRva3lvMQ0wCwYDVQQHDARVZW5v
+                MRIwEAYDVQQKDAlGb3JnZVNob3AxFDASBgNVBAMMC1Rlc3RGb3JnZUNBMB4XDTI2
+                MDIxOTAwMzMwM1oXDTM2MDIxNzAwMzMwM1owUDELMAkGA1UEBhMCSlAxDjAMBgNV
+                BAgMBVRva3lvMQ0wCwYDVQQHDARVZW5vMRIwEAYDVQQKDAlGb3JnZVNob3AxDjAM
+                BgNVBAMMBWNoZWNrMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAk9gg
+                Bz0HHjXGBOmHb7yFeI23y71FxYyn5s04ZDxHMf4aEoecz/2y5TZe4jTN57qhOJjv
+                go70Kh+EcTnrML9jrQ15HO/oICbID/Nu6vcf/Xyfq2xXN6tcgHs+hskT6ayuK+8w
+                UH6e6VWP3mO5Y1FqWVCnw0XF8YxW7AYvGE23+89tujBXdI4sikzJtI2DSQrCyXeT
+                5680mMYxVjqeph00KnkICG7/97GP4QOBfpIFtCtBVAijSAbRH99p/PZguZO2xD+t
+                Dw7HmGyFPyKtw4Kq41mRAZHodjQ15EEWNFq9z/rB0qIOoOa6SKndIdBmhMZULyek
+                CHoPYwVuAzYrie5HZwIDAQABo2UwYzAhBgNVHREEGjAYghZjaGVjay50ZXN0LmV4
+                YW1wbGUuY29tMB0GA1UdDgQWBBStzEHOEQtkZsYGOeF5X+dWuAKKejAfBgNVHSME
+                GDAWgBRGA9T1ErtLKrcwcICUODa9+xgS+jANBgkqhkiG9w0BAQsFAAOCAQEAegDu
+                Ol272af57iFhDqdcmbCFD+zsl2mKxKAtEnDwraq4xfqc6yys7p5PiagxYWjvH86A
+                RWmrGylvU/Ctzd4thsh1VHYVi/+4jh0gE15xdqIJ0fP4wUZUZUtVodDSRqmG5l0I
+                6/ZRX6o6K2v37ruINMYIaq8lanVMFmHuSIxEREdOnQlL7svnQm7fhZ+sNkxA2AhR
+                7Avfp/C00xHo4oCQkdENVUoeDxPcE5Yk8d8PcWOvBpjAkLb5xH/AjShBGpqgyRnw
+                H4hk4ezRBf8j8oNFebfgV0WGoqS1qUT90o1PN3TWzSzdli7tAmjdq9RfdSRSYD16
+                RCDo3jsiMBvcqi6lHg==
+                -----END CERTIFICATE-----
+            key: |
+                -----BEGIN PRIVATE KEY-----
+                MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQCT2CAHPQceNcYE
+                6YdvvIV4jbfLvUXFjKfmzThkPEcx/hoSh5zP/bLlNl7iNM3nuqE4mO+CjvQqH4Rx
+                Oeswv2OtDXkc7+ggJsgP827q9x/9fJ+rbFc3q1yAez6GyRPprK4r7zBQfp7pVY/e
+                Y7ljUWpZUKfDRcXxjFbsBi8YTbf7z226MFd0jiyKTMm0jYNJCsLJd5PnrzSYxjFW
+                Op6mHTQqeQgIbv/3sY/hA4F+kgW0K0FUCKNIBtEf32n89mC5k7bEP60PDseYbIU/
+                Iq3DgqrjWZEBkeh2NDXkQRY0Wr3P+sHSog6g5rpIqd0h0GaExlQvJ6QIeg9jBW4D
+                NiuJ7kdnAgMBAAECggEAB89U8czxgVEJ4tyLQQXOby3dVa/r7aGehPy2S+U7RZLM
+                wcnUKNCYEK+sl3p+ng0n0xuRG259y3PaxThwCiUyGMQrb7Hkqz4hN2Z+p37ie7uH
+                m8CfYtt0iXz5MpmQqblrgfqirL3jmyPf87mE45A7c/hkxFX9PONS/CjfeAMzAuQ/
+                qf3SzhDlWVeN9RvWlIoM6PKEdFL0QmJRaVDjZrO1C3kkpjEVvrcyNNjH0GEG952a
+                LuyEDROMWipvX8Yf52aTsUHBOs174VQZIXVnjFcTm6/BdrLb+uIY1yliq9XDkNp4
+                I0fN8M98Oz3LsZN/PsF9YL2SjaDfxYN7LNhrc5vfgQKBgQDOx/N13VOhkqxjyUZN
+                OD0lMHDBGonsJ8gIXRP6KJFsruw/BUwp5jEngBRW9f/72hwwbWh+DBRNnGv4efna
+                lgIbAYfSGOAgGprJoW2/AH14Dnn27WrJ5gYrWhFowwY0tQI7DrWWksizuYS+dTNO
+                r4bm+XKaG/jMNWTcSjhTE8n9RwKBgQC3COcxddPNNH2yCLlCKjGhhF08e0HuRs0T
+                QqF8vOjSVtvl5nb9t89QROjn5YgtmA6jIGY/cOwMe2gW/JcYJJGHEW/xshl0johY
+                RAuFxx104e9XWJpGzwcqigWKczh7ApDt3Tenx1Hbw8rWQQIwqPlQ8gzwP/VA7mKN
+                QwETw4n04QKBgQCdAHR6KXI2W4dIvKoEN481jXIPLHdMN2hJ8WIZrnO8cZQuxXbu
+                2Ti5JSZMYLvcHd8JZgjQq5s+0mWoY/SxYvR2TNMzUm/Z8FlWfps1Ssn5PgSc1+cd
+                JOnKQLi3Mlyj6EupS6HUkd6Rl2qSsaojNGLZPM0m9dYSNvg9ypy5d20GQQKBgBEW
+                5LcqgC8Nspq308xIsj+ZYzctbvd3ZthghUFnRfm1oGxzuzJvQg0FkhVsye0v4FX8
+                xW8w9OkpcIuM4/KeH3RT/Xa8oUHPuQ08tTK1Z5utKLKoFCd+VvXy0xedMG3TzIJZ
+                AERLCOqS+lJM2Y5/iF+1ad3YquZ4G32C/wvAWxYhAoGBAI9gOBIupy5xCXQGVQDJ
+                6cxftWmejzOv0DN8dMP96HQUAFpoc64bbQrX+WVRDxnjKgrJmjPZY7GoKHZTxV+u
+                F9P4jRumqpTWkGa6SswfmgWHS/Uy1/lbDESK2Zby3fUKLNnauX8qvG2C+PTyww+1
+                k5hW7T6/cuPDd3NGAt0qFcWP
+                -----END PRIVATE KEY-----
+          - name: "sirius"
+            depriciated-hostname: "sirius.test.example.com"
+            description: Virtual host configuration for the sirius website.
+            subdomain: "urn:chip-in:subdomain:forge:test.example.com:sirius"
+            certificate: |
+                -----BEGIN CERTIFICATE-----
+                MIIDmzCCAoOgAwIBAgIUOCU9p0Z5rkJksIl9EuEW5H+UFZUwDQYJKoZIhvcNAQEL
+                BQAwVjELMAkGA1UEBhMCSlAxDjAMBgNVBAgMBVRva3lvMQ0wCwYDVQQHDARVZW5v
+                MRIwEAYDVQQKDAlGb3JnZVNob3AxFDASBgNVBAMMC1Rlc3RGb3JnZUNBMB4XDTI2
+                MDIxOTAwMzMwM1oXDTM2MDIxNzAwMzMwM1owUTELMAkGA1UEBhMCSlAxDjAMBgNV
+                BAgMBVRva3lvMQ0wCwYDVQQHDARVZW5vMRIwEAYDVQQKDAlGb3JnZVNob3AxDzAN
+                BgNVBAMMBnNpcml1czCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAKn6
+                3OO36Ks+nqEMzmzfYifGWfGBFs1t47FyDQndUoJeZ4uh5ZNCBr3mKJmQHnsqEfHt
+                UPst1RmrXIRSOZ+u3YX13n7+PujdfEISsW7ExmB3kwMyAEA/dhLTSCovPyYBs7Hm
+                4xI0KpgikE1zLdAAbzsqc/2Ad4/824skKs5MWc3K4qTfzzIEb+W3qqsfPKfPplIG
+                GxAwjNu128tLO2SUe5c6dWJRUziekgqkH0B5xwes6qYmKkxCdUbzGSNAXcENtGlo
+                yVhgV2VgyWmCiUzDUNUgUvBYb+8SI5bvbVINHxZ/+W00WvC02gUY0TYqtXEiYmNY
+                gToAAyA/JTFS+a4BpWUCAwEAAaNmMGQwIgYDVR0RBBswGYIXc2lyaXVzLnRlc3Qu
+                ZXhhbXBsZS5jb20wHQYDVR0OBBYEFFbUwgNE/UE9ctiIsgfp94xgf4DGMB8GA1Ud
+                IwQYMBaAFEYD1PUSu0sqtzBwgJQ4Nr37GBL6MA0GCSqGSIb3DQEBCwUAA4IBAQBi
+                RYxwLyQGr3DHIFJB6MGOlALo429R5BbGTQjNm5p92xFZVw7aB7pkYDubcFYAvBs5
+                iW5iC78zH5CxHC1SlLTsLbRoUdsYjgbP9CFIFLW8hPEhquIg86EPyxXRRv9QZEy+
+                miYg/chc4I9Cz/i/71dBAqFYLgo6R0XXV8aVSf9Kp9qArXNp1olGfMAEz5lOpz/q
+                trQVnUfeJxM9dtxN+dw90r2l9VKf57Sj5LG3blzPHkerLqM4e3mRwijECFuTEOnw
+                nCevqnZgxpnE3xcMNMoCob8ri1s0/ShVrIg5x5giVE9ubSul8BxraMBQwfpUia7z
+                MgjdAXeNxs5uJQFadfCO
+                -----END CERTIFICATE-----
+            key: |
+                -----BEGIN PRIVATE KEY-----
+                MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCp+tzjt+irPp6h
+                DM5s32InxlnxgRbNbeOxcg0J3VKCXmeLoeWTQga95iiZkB57KhHx7VD7LdUZq1yE
+                Ujmfrt2F9d5+/j7o3XxCErFuxMZgd5MDMgBAP3YS00gqLz8mAbOx5uMSNCqYIpBN
+                cy3QAG87KnP9gHeP/NuLJCrOTFnNyuKk388yBG/lt6qrHzynz6ZSBhsQMIzbtdvL
+                SztklHuXOnViUVM4npIKpB9AeccHrOqmJipMQnVG8xkjQF3BDbRpaMlYYFdlYMlp
+                golMw1DVIFLwWG/vEiOW721SDR8Wf/ltNFrwtNoFGNE2KrVxImJjWIE6AAMgPyUx
+                UvmuAaVlAgMBAAECggEABGSbHliDrx9ObrebwyUPzprZ+rudGQCQzKZ3r0xUxFFH
+                yExOGFzxuykuXe+jVggLkC7Ts7YmxoPO/413d0jH6V0mG66a9h45RqTgiI4V2Wrl
+                tgSuDHsHZGuo9wwjC+qp1/xxXGhUPHvSMmo6YiCMv2D0v/W4wVQl4WX1JEFFZePg
+                XNVaRlOsQf4WJycFbto5L1bOVgU8KJ42Wg/RkZ4LWbcAZFh5bcm0BjYnFo9vBqJ+
+                JPbbHCY5EqpzRnpjrJORmJ6UYVxBxorUespp36+w0qPNaYlcm3YARO/iHIgNi+0F
+                EJa/eDfCL/FdLHxJEtg/jVhEOzbhi+HTSxunYG+jqQKBgQDk++xe73jpn9Q3aViY
+                et51XMA3bCxDj3NS/nHnWDUg3izJH/B6JNilC0d1UGXF9SyP+2wrVrBLUTk7E46W
+                1cwNlGds5hhjgVf2IlrR/SkxHPyWtLMGcVBKCskCm4TrZs/1J95Jr80HYJ2z2emt
+                WONuE/1ll14BKuC4+kXDIJATKQKBgQC+CNG3kp8VuKsDhoUlMiu3UMrBi9KvHZNw
+                T60PqlarIUodQzEoig+jBoO6HaUNMPQ9RqGmig6sQ0JlpfHDcqUKXqIQnnhMVx1W
+                +0wKk35jOwyQifkMadPgbxHQ793GfO5TwZEn5Hv++QnG5BnNA/tVQTart1KUc+VK
+                yNaAVb6j3QKBgQDSN82q4mK46HilXlttsO9mA36b4v1IEPwo51uercYopI+tHVti
+                Z01VR+OUefjVId6FWKbXqsAyhSDrcWroYuLwXJwOx7cAMxCT8Lo8KhSU+C2UFdR9
+                R64UK46ajDgc/MhSIwXZ1EGAUly1bosvD3nL5yItECfHHpwsdedx2gUq8QKBgC5c
+                EG1sQ4sVBgNSKeEtICUUfKJC7h7yZCmeBmYv8/zDnkUNQ0zUgYQP7srUuJNDQhJA
+                zObH/1RfBC+wEA7SRRkGhRrwzgAxsGKr450g5lBm82W/gxZYKuwxrHMAUWY+zBV6
+                v2KwBt/o+U2gD/tH4WSnCCNUEb1NmL5pyIp+YIexAoGAZ7wwZuEaAEDOQ+d5jfVh
+                +5leaON/AF5/rjmy+4OEFzmXdqkzC97ThFfi5LN0kDV7gMTOPsAvFIvlRaDb95Xy
+                2fTpGOkVl1EDqLloqSqSHZ4wXber4lgqnrgo5ts7qYavSimnl0XVmMPynpxiWp31
+                vx2GQEX/+amdfPthcqN4Bm4=
+                -----END PRIVATE KEY-----
+            disabled: true
+      routingChains:
+          - name: fruit-shop-route
+            title: Routing-Chain fruit-shop-route
+            description: Virtual host handling 'fruit' subdomain requests
+            rules:
+                - match: "request.path.equals('/robot.txt')"
+                  action:
+                      type: returnStaticText
+                      content: "User-agent: *\nDisallow: /"
+                      status: 200
+                - match: "hostname.equals('www.test.example.com')"
+                  action:
+                      type: proxy
+                      upstream: "http://127.0.0.1:9000"
+                - match: "hostname.equals('auth.test.example.com')"
+                  action:
+                      type: proxy
+                      upstream: "http://127.0.0.1:9001"
+                - match: "request.path.starts_with('/api/')"
+                  action:
+                      type: proxy
+                      upstream: "http://127.0.0.1:9002"
+                      authScopeName: "shop_scope"
+                - match: "hostname.equals('check.test.example.com')"
+                  action:
+                      type: proxy
+                      upstream: "http://127.0.0.1:9003"
+                - match: "hostname.equals('sirius.test.example.com') and request.path.starts_with('/images/')"
+                  action:
+                      type: proxy
+                      upstream: "http://127.0.0.1:9004"
+                - match: "request.path.starts_with('/external/')"
+                  action:
+                      type: redirect
+                      url: "https://ext.example.com/hello"
+                - match: "request.path.starts_with('/fruit/apple/')"
+                  action:
+                      type: setUpstreamRequestHeader
+                      name: "X-Sweet"
+                      value: "apple"
+                - match: "hostname.equals('api.test.example.com') and request.path.starts_with('/fruit/orange/')"
+                  action:
+                      type: setUpstreamRequestHeader
+                      name: "X-Sweet"
+                      value: "juice"
+                - match: "request.path.starts_with('/fruit/orange/')"
+                  action:
+                      type: setDownstreamResponseHeader
+                      name: "X-Powered-By"
+                      value: "BFF-Proxy"
+                - match: "hostname.equals('www.test.example.com') and request.path.starts_with('/shop/')"
+                  action:
+                      type: requireAuthentication
+                      authScopeName: "shop_scope"
+                      protectedUpstream: "http://127.0.0.1:9000"
+                      oidcClientId: "fruit-shop"
+                      oidcRedirectUrl: "https://www.test.example.com:8000/shop/"
+                      oidcAuthorizationEndpoint: "https://auth.test.example.com:8000/authorize"
+                      oidcTokenEndpoint: "http://127.0.0.1:9001/api/token"
       hubs:
           - name: hub1
+            urn: urn:chip-in:network:forge:hub1
             title: Hub hub1
-            description: SpnHub instance for the production environment.
-            fqdn: spnhub.sr.example.com
+            description: Spnhub instance for the forge environment.
+            fqdn: hub1.test.example.com
             serverAddress: "0.0.0.0"
             serverPort: 4433
             serverCert: |
                 -----BEGIN CERTIFICATE-----
-                MIIDwTCCAqmgAwIBAgIUCA/6r1GSV9cc5djXCRP0Q7yy9aEwDQYJKoZIhvcNAQEL
-                BQAwWzELMAkGA1UEBhMCSlAxDjAMBgNVBAgMBVRva3lvMQ0wCwYDVQQHDARVZW5v
-                MRQwEgYDVQQKDAtUZXN0U2VydmljZTEXMBUGA1UEAwwOTXlUZXN0U2VydmVyQ0Ew
-                HhcNMjUwOTI0MDYwODM0WhcNMzUwOTIyMDYwODM0WjBTMQswCQYDVQQGEwJKUDEO
-                MAwGA1UECAwFVG9reW8xDTALBgNVBAcMBFVlbm8xFDASBgNVBAoMC1Rlc3RTZXJ2
-                aWNlMQ8wDQYDVQQDDAZTcG5IdWIwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEK
-                AoIBAQCSDsM+uOZTqDVHpz8I1fLKDW47FmBavVxTH4VcK/ahn3AWGuYK9q+pU6nr
-                /6qTAwSCYR66ZCd3D4bQbVQYDMuR/52jhRHoDjVSjN7DqgvkIGGViT3SoYahIWbM
-                qqsUQoYfoGwIj7E3wK5oxMUF6tWxiz2EtNS58NTsIubUioxLusmRsFzdxAkxdbyI
-                Ucoh9dNEv+WANtIrmVNjc7MJD8MfYb7LXk0uJxkCASfRR7M3M53uROIoCf3uBv1n
-                XLR1c/CImY9p3hl4q2EBpdRKp9uXJB9EciMuWKQNFNBHQ88KNIlRyUFJqmPq3eLC
-                FZS6Sj3VMXqcsVM8HMINH6B30bXJAgMBAAGjgYQwgYEwPwYDVR0RBDgwNoIWc3Bu
-                aHViLndnZC5leGFtcGxlLmNvbYIWZGViMTQyLndnZC5leGFtcGxlLmNvbYcEwKgK
-                jjAdBgNVHQ4EFgQU5jBtM4HozO8TRdVSpcpA1H9cXdMwHwYDVR0jBBgwFoAUvFcu
-                sI6P+DTZkDYeuGYY0HIxLNowDQYJKoZIhvcNAQELBQADggEBAH3KnrTNlCl7YaAR
-                rMMomxseh7rixoo1xSmejFg0Ypn70ES6WcHI4uBNkrnGdXfhlV5zwFJnvSTowQCM
-                8RVZHWn8AJLai+sYHcby6OYrpE6EPKrRi12mqrrPs1sducycwFmnWYPzmL3xwIJv
-                i3YDkqc78a+hO2u4cXbY2mDpxRwBKkt+MIg14zp+SKAP3UjAkV02Q07+SNEyMUXL
-                QX88c2ok3vDgRIAx31XMtFNIU7QN+sGS0MnsgZSN8zQtImm6hyq/8HE6xZuqToGg
-                JHs5YNSSenAmkdUlcehdWsZ3N9ZPY25DxmJV5hEWFo3cDM7YA2KJv4AKxLF7zICT
-                1zLoXD8=
+                MIIDlzCCAn+gAwIBAgIUOCU9p0Z5rkJksIl9EuEW5H+UFZAwDQYJKoZIhvcNAQEL
+                BQAwVjELMAkGA1UEBhMCSlAxDjAMBgNVBAgMBVRva3lvMQ0wCwYDVQQHDARVZW5v
+                MRIwEAYDVQQKDAlGb3JnZVNob3AxFDASBgNVBAMMC1Rlc3RGb3JnZUNBMB4XDTI2
+                MDIxOTAwMzMwM1oXDTM2MDIxNzAwMzMwM1owTzELMAkGA1UEBhMCSlAxDjAMBgNV
+                BAgMBVRva3lvMQ0wCwYDVQQHDARVZW5vMRIwEAYDVQQKDAlGb3JnZVNob3AxDTAL
+                BgNVBAMMBGh1YjEwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQChypSC
+                Lg4/fCKrHr1ssA0Ygva3a4K2RSZd/7xjj5VrFe0kZqRw6Sf+YtqD98ANgFe9jVFv
+                SqBYxMipMilAKfuc6A4Q09UIC5mGURmQe1FHGHFVHcShbCx2yu3M+hhs65QyXMKW
+                pAu8cXMlKy1TrFXwlG9KAvkOjF50DRgez5zALLNCa5QJKhARLPn1vuzEVQY8T62U
+                nceNvbZYw6DY719whPFFm6jUrCQcIZTDK1BlJjP0eWqfU5MGM4S/LprXjwJAMSOn
+                Ah8HzOMMoF2ezc38xcM5KmKpUfGZjMwdDCcZTyLfErVONSeJZ8vpPo3NCwncf6K9
+                AZhGe24Bh254jZrtAgMBAAGjZDBiMCAGA1UdEQQZMBeCFWh1YjEudGVzdC5leGFt
+                cGxlLmNvbTAdBgNVHQ4EFgQUpHAQx971wUvHNUrwV1X1rvBfkpcwHwYDVR0jBBgw
+                FoAURgPU9RK7Syq3MHCAlDg2vfsYEvowDQYJKoZIhvcNAQELBQADggEBADFaxQvv
+                xrRwwFZWd3qybscwP+4OMIUxKPDyHILXmyzkRWxTynN80AL+KREilE40lcZnOUXJ
+                6L3FhPLCWCrvG2Q10BoSZe1TNAqdaCJVSN3HPEuu/O1d/z1D6rVQFe1kLcYejPE0
+                BdDn+AFz0yhsz1h882YnfnZAxDxYK5riaCyKIFUDT0oHEZkAGkvntX6aDu8rPzoH
+                BW83dq3uAklL6ti1YX+mBo9TBjE8uG2ZJ4nWlS60B8YW5FoszLmb8wqgqD3zyiy1
+                6qZkhA+RcQ/FhtmtrT3SeIfsFenPB+sfe1fP7mK+ScWxd4enTQgUm+1lPKimo7VI
+                TgusBMGd6uwTBTI=
                 -----END CERTIFICATE-----
             serverCertKey: |
                 -----BEGIN PRIVATE KEY-----
-                MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCSDsM+uOZTqDVH
-                pz8I1fLKDW47FmBavVxTH4VcK/ahn3AWGuYK9q+pU6nr/6qTAwSCYR66ZCd3D4bQ
-                bVQYDMuR/52jhRHoDjVSjN7DqgvkIGGViT3SoYahIWbMqqsUQoYfoGwIj7E3wK5o
-                xMUF6tWxiz2EtNS58NTsIubUioxLusmRsFzdxAkxdbyIUcoh9dNEv+WANtIrmVNj
-                c7MJD8MfYb7LXk0uJxkCASfRR7M3M53uROIoCf3uBv1nXLR1c/CImY9p3hl4q2EB
-                pdRKp9uXJB9EciMuWKQNFNBHQ88KNIlRyUFJqmPq3eLCFZS6Sj3VMXqcsVM8HMIN
-                H6B30bXJAgMBAAECggEAFzHH+MR1M1DRkTzyii0rvsGOQUzm5VIQANVPINmMc5M1
-                whTodlJBiCLUp7k0td7zTt8seY4hJEuvbZcHFUCm7VsKBidCNjdXaXIciDcPZ11r
-                Ecu3KSVkk18SC6uIupFr6kbYES38hy2OpO2mmi92WxkRHmt3IsYnkg5i2Nrdt8LG
-                +pkCfTD6Swg/A0+nU3p7MNXNOoNrnBnB2jCgK56cpShtWP4KXEwIYKQZROF+A2Cf
-                fVgZ/oXyYTgUJ0gQlWtKYDMhNC+gMUQXaK55RS90+L7bHwmOnm8DYqCCp4eu4Obu
-                6W3eYowIJ8OGuDsoc6CVsj1bA3PB8GJr5F0GMUZBmQKBgQDJqmOwLQU5AlQfo36G
-                tlVqzWLS+mujq74IDeDFsZu9ezYNSoc3wyeUos9FZHEUWK9mAwYL99Fb3X4BiUd4
-                09yNOIzbDWh16X8iwna5TOELR+Yhl4Y8YV92gsr6j4rMIDq4OLkxx276DYPU9hjj
-                GXXAA4tiSCj2vC1AQzqWEcysFQKBgQC5aOR6EEJDb6ZjzSI0xO7e0oXKzOoDAqIe
-                QqisxEp1MoDQOkv/+QozUX6bU38RX9wfE3wmeNW9mPqwimifTSBKiwjeowKAFG+W
-                UwM5c5smJnzzrd02gnOXsBj6G+BCWWVAZ9eTn++PzJvNxm5XwPQkBGrFhubnsb/O
-                K20poVNr5QKBgFQOBQcFfMvKQK3/Q1l63hdqC+rMHdlWWBqbTjiYUsWjeWAI1FtV
-                qEW3ppTRzKAiZtkqIXcTj9uucjrJsVSXWbIzA+K5r/SVojwmub16YcKF8VHHClhY
-                baXD1j6hXcS/Gjp2yhoJeiQXRf+Zo73kesPRtmL8mLZesK28V8r9GEYRAoGAbVR5
-                7bRqroNG1XDf68f4pzHyrOx6TT4fRMK/3eh9k3AtXxwRNqauqiYzBvqMYj1penWt
-                7q2wM/XiVXm4Sb9b/DjSCR6MWeQzDKx0qUsPQMbPRY3PdNYlvVucztbjPZyjRQA2
-                sZlM1Tms4gFRjbN9A0QLheCPhi5dUQBwhWzY2TUCgYEAjk+r91MHg4BJxfhqnQFE
-                gve2+733Q88eYdqMXOc+azWLl+77quW3Jukfvs0yX01o8t5SHDZtn3l4pdfOFiDO
-                IeFv0sgzvtwfuPnMTl/ferpKVYiSkECVjM9kw7UfcxFXs4LO48OYS4k+xtBlfN+V
-                PI6sEq8IU7mqeHLddOGJXuw=
+                MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQChypSCLg4/fCKr
+                Hr1ssA0Ygva3a4K2RSZd/7xjj5VrFe0kZqRw6Sf+YtqD98ANgFe9jVFvSqBYxMip
+                MilAKfuc6A4Q09UIC5mGURmQe1FHGHFVHcShbCx2yu3M+hhs65QyXMKWpAu8cXMl
+                Ky1TrFXwlG9KAvkOjF50DRgez5zALLNCa5QJKhARLPn1vuzEVQY8T62UnceNvbZY
+                w6DY719whPFFm6jUrCQcIZTDK1BlJjP0eWqfU5MGM4S/LprXjwJAMSOnAh8HzOMM
+                oF2ezc38xcM5KmKpUfGZjMwdDCcZTyLfErVONSeJZ8vpPo3NCwncf6K9AZhGe24B
+                h254jZrtAgMBAAECggEAGQbGkRqBrrVLgY/IOltDM1Lyye2R8xLgO/MWl4n60W07
+                WQGdly+htZph9b7pkM0VBWeqPJ5dDk4mQfHV6qxz1NIaduTlk5CDx4CdBTnmGSrB
+                QSrRIy0h9aAvR6E6DQMl0eKCYR3wCM69wnaa1NIYGxZC3r51+xegdrAd1opD03/3
+                jblkRNP9WKiinYIEDG7hfnoQ9DK/3BII604odiNfp8nwBuQeW92B3QJg9KNmXjoZ
+                eHK2ReTmjrL3XOXBNoBIbWMXkLqYNWhBX+qKgqjAmVOlsZ3OI8y6a1WZajQQTqb2
+                IUmRUSpZMyJDYKPLAeoKcuI23i8K/xj8kXZ1LiT8kQKBgQDXFY5RVQ51sa21VPns
+                lLbz2jZFMsYbssgxGjwpE+jIGcD8/hVADLth/KfaEFujlUg3TFBzaLFuGhFc9+yI
+                RQEcQaGKMlgh63nOErBSo8xVTqdHbXCMAKc/iMc8/lfWJ7aAC0cCySFYirMOjrXt
+                akVgm3ar6bvNUYyVRNKIJ0ksVQKBgQDAkbMzxgsbyi2OSWd8/8cieQo1ExLs7HMD
+                sF3h5kmuLQumyG/Qe2CfT8PsPnZ08xuzIdk5dh1NoJoN0mq2z2AuGXEojhomhnAG
+                8a6gn5WFm4oZBoonoRTnOJUOCGGmpW1VQdRk7/sW6lC5y6L2IFspOXFDr0bstBwL
+                fxoSQTPMOQKBgDGUS3keFTY2Hee1zeKmKUIu4+GxoY8S+Cixdnq1lyxBG4Z1/2oD
+                RVKCDiMrMCSWLc5pbgYcdQH/Sk9W6xRCa84apuUXU8+F208Qacqy7VAg0Fibtpzf
+                La5slhjOPGsmPmBnuRfAS0qAtmO9q9wtag6p54IbX+olSTXDZpByFeD9AoGBAJjA
+                epgtFo66t5xQmejLtBiiTvh+4tpRTYK1miMhW3zweneYMyn7VE/LJCz391sZpPVZ
+                ekhcay4yoUEpkkDlCvRGdj6nShMZPTAk8lKzhBXxpX/ochqxajVn6sSw3VUlkC67
+                A1H2EwTAZbybze7TB70Rtcjs9qO40y5Daljko8PxAoGAVx0uVj/4jZGI5gIKOgUA
+                JukIGbAGDcu14TSRbIxcyKROPYxIksBLtD1noo4xJ1YbAPExbBSCJc+oM00vncIS
+                03rS84jkxhy/Jd5UA5aMOFUmSMrSHye+t492pOqEr41BnYznMeWydbMA54cK0W8I
+                73Qc9Spdi+BwP9mKBQlvoBs=
                 -----END PRIVATE KEY-----
             services:
+                - name: www
+                  urn: urn:chip-in:service:forge:hub1:www
+                  title: www service
+                  description: Web frontend service for the fruit shop.
+                  availabilityManagement:
+                      serviceId: "provider-www"
+                      clusterManagerUrn: "preconfigured-local-development-Docker-environment-only"
+                      description: "delayed startup triggered by the first payload"
+                      startAt: "not-implemented"
+                      stopAt: "not-implemented"
+                      ondemandStartOnConsumer: false
+                      ondemandStartOnPayload: true
+                      idleTimeout: 0 # no shutdown
+                      image: "provider-www"
+                      command:
+                      options: ["--network", "spnnet"]
+                      env:
+                  provider: urn:chip-in:end-point:hub.master.sr.example.com:www-server
+                  consumers:
+                      - urn:chip-in:end-point:hub.master.sr.example.com:www-gateway
+                  singleton: false
+
                 - name: api
                   title: api service
                   description: API service for retrieving fruit product data.
                   availabilityManagement:
-                    serviceId: "provider-api"
-                    clusterManagerUrn: "preconfigured-local-development-Docker-environment-only"
-                    description: "delayed startup triggered by the first payload"
-                    ondemandStartOnConsumer: false
-                    ondemandStartOnPayload: true
-                    idleTimeout: 0  # no shutdown
-                    image: "provider-api"
-                    command:
-                    options: ["--network", "spnnet"]
-                    env:
-                      DATABASE_URL: "postgres://shopuser:myShopPwABC@127.0.0.1:8432/shopdb"
-                      OIDC_ISSUER_URL_INTERNAL: "http://authserver:8082"
-                      OIDC_ISSUER_URL_EXTERNAL: "http://localhost:8082"
-                      CORS_ALLOWED_ORIGINS: "http://localhost:8080"
-                      SERVER_ADDRESS: "0.0.0.0:8000"
+                      serviceId: "provider-api"
+                      clusterManagerUrn: "preconfigured-local-development-Docker-environment-only"
+                      description: "delayed startup triggered by the first payload"
+                      ondemandStartOnConsumer: false
+                      ondemandStartOnPayload: true
+                      idleTimeout: 0 # no shutdown
+                      image: "provider-api"
+                      command:
+                      options: ["--network", "spnnet"]
+                      env:
+                          DATABASE_URL: "postgres://shopuser:myShopPwABC@127.0.0.1:8432/shopdb"
+                          OIDC_ISSUER_URL_INTERNAL: "http://authserver:8082"
+                          OIDC_ISSUER_URL_EXTERNAL: "http://localhost:8082"
+                          CORS_ALLOWED_ORIGINS: "http://localhost:8080"
+                          SERVER_ADDRESS: "0.0.0.0:8000"
                   provider: urn:chip-in:end-point:hub.master.sr.example.com:api-server
                   consumers:
                       - urn:chip-in:end-point:hub.master.sr.example.com:api-gateway
@@ -133,18 +555,18 @@ realms:
                   title: auth service
                   description: OpenID Connect (OIDC) authentication service.
                   availabilityManagement:
-                    serviceId: "provider-auth"
-                    clusterManagerUrn: "preconfigured-local-development-Docker-environment-only"
-                    description: "auto startup triggered when the consumer is ready"
-                    startAt: "not-implemented"
-                    stopAt: "not-implemented"
-                    ondemandStartOnConsumer: true
-                    ondemandStartOnPayload: true
-                    idleTimeout: 0  # no shutdown
-                    image: "provider-auth"
-                    command:
-                    options: ["--network", "spnnet"]
-                    env:
+                      serviceId: "provider-auth"
+                      clusterManagerUrn: "preconfigured-local-development-Docker-environment-only"
+                      description: "auto startup triggered when the consumer is ready"
+                      startAt: "not-implemented"
+                      stopAt: "not-implemented"
+                      ondemandStartOnConsumer: true
+                      ondemandStartOnPayload: true
+                      idleTimeout: 0 # no shutdown
+                      image: "provider-auth"
+                      command:
+                      options: ["--network", "spnnet"]
+                      env:
                   provider: urn:chip-in:end-point:hub.master.sr.example.com:auth-server
                   consumers:
                       - urn:chip-in:end-point:hub.master.sr.example.com:auth-gateway
@@ -153,112 +575,188 @@ realms:
                   title: database service
                   description: Database service for the fruit shop.
                   availabilityManagement:
-                    serviceId: "provider-db"
-                    clusterManagerUrn: "preconfigured-local-development-Docker-environment-only"
-                    description: "auto startup triggered when the consumer is ready"
-                    startAt: "not-implemented"
-                    stopAt: "not-implemented"
-                    ondemandStartOnConsumer: true
-                    ondemandStartOnPayload: true
-                    idleTimeout: 0  # no shutdown
-                    image: "provider-db"
-                    command:
-                    options: ["--network", "spnnet"]
-                    env:
-                      POSTGRES_DB: "shopdb"
-                      POSTGRES_USER: "shopuser"
-                      POSTGRES_PASSWORD: "myShopPwABC"
+                      serviceId: "provider-db"
+                      clusterManagerUrn: "preconfigured-local-development-Docker-environment-only"
+                      description: "auto startup triggered when the consumer is ready"
+                      startAt: "not-implemented"
+                      stopAt: "not-implemented"
+                      ondemandStartOnConsumer: true
+                      ondemandStartOnPayload: true
+                      idleTimeout: 0 # no shutdown
+                      image: "provider-db"
+                      command:
+                      options: ["--network", "spnnet"]
+                      env:
+                          POSTGRES_DB: "shopdb"
+                          POSTGRES_USER: "shopuser"
+                          POSTGRES_PASSWORD: "myShopPwABC"
                   provider: urn:chip-in:end-point:hub.master.sr.example.com:database-server
                   consumers:
                       - urn:chip-in:end-point:hub.master.sr.example.com:database-client
                   singleton: false
+    - name: development
+      urn: "urn:chip-in:realm:development"
+      title: 開発システム
+      description: Realm for the development environment.
+      deviceIdVerificationKey: |
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA96yON3DXHHS7DMfe4h1W
+          VSyRJI/mkrKNgDmIboIGYYNcBALMblC3IRgE9gEpaGJ1Ll+At5yl4UF90iru+4Kr
+          /bPRRjnCUBIyBztX7TcRPlbH4zfvYHx9vJtUuckVELwzmVz5T1K6UgbXQOZv96Y6
+          PNcBnrc/M0zW7GWIqcktEMuSdcMlYdJ8VJYNA4sfpSQLJfZI+j964tjoVhr2JNsi
+          kInG6TZmNBjjPSqFtDzTLxC12ngxJQDUuN1IRqAcSchjWMFwY67voVpS39u2nFVj
+          rbnHFMU8bkmTF3WizL+6ZPKPU28+WrYxH4EIEhToyIhktCb9DSKUSiIGa6+KvpfN
+          ywIDAQAB
+          -----END PUBLIC KEY-----
+      deviceIdSigningKey: |
+          -----BEGIN PRIVATE KEY-----
+          MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQD3rI43cNccdLsM
+          x97iHVZVLJEkj+aSso2AOYhuggZhg1wEAsxuULchGAT2ASloYnUuX4C3nKXhQX3S
+          Ku77gqv9s9FGOcJQEjIHO1ftNxE+VsfjN+9gfH28m1S5yRUQvDOZXPlPUrpSBtdA
+          5m/3pjo81wGetz8zTNbsZYipyS0Qy5J1wyVh0nxUlg0Dix+lJAsl9kj6P3ri2OhW
+          GvYk2yKQicbpNmY0GOM9KoW0PNMvELXaeDElANS43UhGoBxJyGNYwXBjru+hWlLf
+          27acVWOtuccUxTxuSZMXdaLMv7pk8o9Tbz5atjEfgQgSFOjIiGS0Jv0NIpRKIgZr
+          r4q+l83LAgMBAAECggEALuPI0v82gokpBozqigWC3EJBQlpKDVjniDCcP0u3mIuN
+          hqbe/D2kxgutmMN0ivIk/EARdvGdyA0lnH4LW6uME06RXsm9m3ouZYcbKOplhddZ
+          JY/n7mzzQxtnSXsj1VTEMhNTkex4IOJxqzRVW13ppa4Q/PL1cKlqATxhyL8xHH4G
+          pmq8Q899T7OW7vLdysede68sjbA04fL/gaPNxPj5TpsPKvreIQRpziXDoJCalMp9
+          EUi0CbzpoVheahJlSi6In9byRxGauVIao+BgNh/NNYqVnj/Tp6X2YGnhN5UXYA+j
+          V4xMjmKFgHIFaptpUTudpyAZZnG/WQVKJDeixhscaQKBgQD9MpJw0cgLhRenwL0V
+          zJeMlt1OwnA4sbbmxUS67eAy31cZzUS6N2cF+2RaP0WjGSnZyxcXPA72HXnM8/dP
+          B5tX6ce9PJ0px7YtOnwwcjGMKqQsPALF9Uvm5FfuWlCdHaHzfUv2wUGS8ON6cJDW
+          qgufBrMynmtw8ZG1Wr+5MIiRgwKBgQD6alUzZrAJOwM/IYdIte3YISx4a69j0epc
+          Vh7Bzm3tQYF02nSFpMSKX8sQeQ5wFx4gjhGWJp3tn0xrWrsN44b0oG4zKE9QaRVJ
+          hCzBa/Ka+p/EsXc/kc9CSMuylJ20LtA0B5TEgYJ8QzzCA8BsRUc47+JkR3gO1N9w
+          jS5bPfyIGQKBgQC6f9Kv+UXBfoJDFUvxz6Zdbw6KIdxpVjWj2/BZRDgdILdWkQUr
+          qP1gwaBUfUB8918FRnu2qI1YqbN6zMUAWFkLM27lq80T5kABJpAtWx+13/7XekiM
+          qbcD1nQSZEH2yMnuwP8APa9gXcEhAeMdy1kOBPBfu6LmKXmrPLH15ZLiowKBgDgO
+          u7oA/+FhG43zZISLbY4XhwwCF0ZCRLOc98+s9YDKTD+rc7BDPVg4r42le+ztz+m7
+          xAYX6Py7z3Cs4/js+VYj3+eF25OFoqVNeHNoRewZtNBkZeyOKJaPE0KL8G3YmPU8
+          yTngQCSvLJfGHTpfm90MHmMSeLbhQo/AmyMD0ldpAoGBAJ9tQ3R33AYkkjCJSc/u
+          8X121N2+URZxuA23bMJH6OoJddtz8AFyKV36ihbVKrJ1/mcXkdZ9+WEszQaVsGsm
+          CvsxaZWlMj4yZoVCx7ZqrFx17AThlxCpi7rFoFZbkk+M9+RX6U8d8r39qyfqjJFp
+          0kaUPHgv1Qgvn5SYcebU+AQ4
+          -----END PRIVATE KEY-----
+      cacert: |
+          -----BEGIN CERTIFICATE-----
+          MIIDmTCCAoGgAwIBAgIUQFlH+y76TW4GCwvGWEESfT4sTZAwDQYJKoZIhvcNAQEL
+          BQAwXDELMAkGA1UEBhMCSlAxDjAMBgNVBAgMBVRva3lvMQ0wCwYDVQQHDARVZW5v
+          MRQwEgYDVQQKDAtUZXN0U2VydmljZTEYMBYGA1UEAwwPTXlUZXN0U2VydmljZUNB
+          MB4XDTI1MDkyNDA1NDkzNFoXDTM1MDkyMjA1NDkzNFowXDELMAkGA1UEBhMCSlAx
+          DjAMBgNVBAgMBVRva3lvMQ0wCwYDVQQHDARVZW5vMRQwEgYDVQQKDAtUZXN0U2Vy
+          dmljZTEYMBYGA1UEAwwPTXlUZXN0U2VydmljZUNBMIIBIjANBgkqhkiG9w0BAQEF
+          AAOCAQ8AMIIBCgKCAQEAvqP7GuNgv5umIIXK+QqT2auq56x1oSAA+oP4Fmp+sjcO
+          e08QES/LlbXesVRYHHV624qInpdEKTwuENxZi0+mkm5zO09GFlQiKvas3YvN5Ecq
+          aWVoPWHezcXt2K+ogNU1rjPqgENvpKnWtzZPGIHiKnN0/taUR7AotxPg4wV1QVuv
+          EgavXqIFGBhH+Os+6HnCls3XukmMBu3YTxgB6wwYUHbXqzBQNivugXU1AFx1a7tI
+          GRCGEAJiJ//g1mTu8Ji2/XvN/QpkSv5GgjwDToB07ZvRNSOarODOwT37Fr87Nfy1
+          IpIGcmbNcpJik+LNqpyfdUALuLyXAbjjYw7OML9HqwIDAQABo1MwUTAdBgNVHQ4E
+          FgQUKazWF2yeXfg6aTVhYFwTyT3idPQwHwYDVR0jBBgwFoAUKazWF2yeXfg6aTVh
+          YFwTyT3idPQwDwYDVR0TAQH/BAUwAwEB/zANBgkqhkiG9w0BAQsFAAOCAQEAa9Qc
+          TEzjkbIWczZ1h9xDriG8RcST0pmdTR2QMo/UeaJayNjtxp9rEuNVW8Xs7COENtPv
+          wfq/X3RLXh+YBYT2qC0qO1HuAoLOHchxKMEJBJo1QjVkNmJHtIq6sddzm16EmW0o
+          jz2dN3fp1S9PvLwKha8YOMX1R9eiwT7UHAXJjOud6xdF6T8veDvhrFKTsKxgKFkG
+          NoUiNw+rzOVCOuwgt1I7VcfIgA0dmjDz3RlK1nPXroZaeMKgLEAyLPh704h8vvDT
+          ZHgx+Nrf1b+TNgNLxpnmqFH4NWdezFSfvHHRBOY3sFvMJFU81fnk3QTZYnRwrsSD
+          M7eKGakIiHjPZDWOEg==
+          -----END CERTIFICATE-----
+      sessionTimeout: 2592000
+      administrators:
+          - admin1dev@example.com
+          - admin2@devexample.com
+      expiredAt: "not-implemented"
+      disabled: true
+      zones:
+          - name: sr.example.com
+            urn: "urn:chip-in:zone:development:sr.example.com"
+            title: Shop dev zone sr.example.com
+            description: DNS zone configuration for the dev shop.
+            dnsProvider:
+            acmeCertificateProvider:
+            subdomains:
                 - name: www
-                  title: www service
-                  description: Web frontend service for the fruit shop.
-                  availabilityManagement:
-                    serviceId: "provider-www"
-                    clusterManagerUrn: "preconfigured-local-development-Docker-environment-only"
-                    description: "delayed startup triggered by the first payload"
-                    startAt: "not-implemented"
-                    stopAt: "not-implemented"
-                    ondemandStartOnConsumer: false
-                    ondemandStartOnPayload: true
-                    idleTimeout: 0  # no shutdown
-                    image: "provider-www"
-                    command:
-                    options: ["--network", "spnnet"]
-                    env:
-                  provider: urn:chip-in:end-point:hub.master.sr.example.com:www-server
-                  consumers:
-                      - urn:chip-in:end-point:hub.master.sr.example.com:www-gateway
-                  singleton: false
+                  urn: "urn:chip-in:subdomain:development:sr.example.com:www"
+                  title: www
+                  description: Subdomain configuration for 'www'.
+                  fqdn: www.sr.example.com
+                - name: sirius
+                  urn: "urn:chip-in:subdomain:development:sr.example.com:sirius"
+                  title: sirius
+                  description: Subdomain configuration for 'sirius'.
+                  fqdn: sirius.sr.example.com
       virtualHosts:
-          - hostname: "sirius.sr.example.com"
+          - name: "sirius"
+            depriciated-hostname: "sirius.sr.example.com"
             description: Virtual host configuration for the main shop website.
-            subdomain: urn:chip-in:subdomain:shop:sr.example.com:sirius
-            routingChain: urn:chip-in:routing-chain:shop:fruit-shop-route
+            subdomain: "urn:chip-in:subdomain:development:sr.example.com:sirius"
             accessLogMaxValueLength: 512
             certificate: |
                 -----BEGIN CERTIFICATE-----
-                    dummy cert
+                MIIDvjCCAqagAwIBAgIUO7HKCuR7Wrj43+g6aGsRU9uTTLAwDQYJKoZIhvcNAQEL
+                BQAwYTELMAkGA1UEBhMCSlAxDjAMBgNVBAgMBVRva3lvMQ0wCwYDVQQHDARVZW5v
+                MRcwFQYDVQQKDA5TcG5UZXN0U2VydmljZTEaMBgGA1UEAwwRTXlTcG5UZXN0U2Vy
+                dmVyQ0EwHhcNMjUxMjAyMDY0NjEzWhcNMzUxMTMwMDY0NjEzWjBlMQswCQYDVQQG
+                EwJKUDEOMAwGA1UECAwFVG9reW8xDTALBgNVBAcMBFVlbm8xFzAVBgNVBAoMDlNw
+                blRlc3RTZXJ2aWNlMR4wHAYDVQQDDBVzaXJpdXMuc3IuZXhhbXBsZS5jb20wggEi
+                MA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQCViPFTS/8rClBlV/tlPRdkFbgu
+                sYL7hLTvcfupMPgCSTZwCGBlijqcY3dwxJJato6nFEm1PSXrkZV5ZVbCPi/aJ1va
+                TT/627SB6M93lfFA8ftNtS/boJWD0szAB8wEBPx/DdVwXhjlgpR8TAJAXXd6wchf
+                f+tBmk2Tn4tMrvSSBlV5UMwCUWfzV/d4/zQUzxhpHgQUum2T3nBmCtMs6zuR2itj
+                Pd7ZMv2/NLW8lU0unYsHOcNsgPrJaHghKqilAXLirCd+vjdgY3jZ9ta33OOBAA6X
+                TKqMgoI0Rd3NGLNQYNN9GWu0rapO05vX9DVL5udy4VARyNKqF6c8DU3WJJ4xAgMB
+                AAGjajBoMCYGA1UdEQQfMB2CFXNpcml1cy5zci5leGFtcGxlLmNvbYcEfwAAATAd
+                BgNVHQ4EFgQUEKKmqNSuTu0TpjPjTUhiBKyaMpswHwYDVR0jBBgwFoAUFA+rCLx/
+                90rIw3jvY7LHNEjgJngwDQYJKoZIhvcNAQELBQADggEBABcnEQIEef7dlpwLtP9F
+                SoLrNKYTii7vR09wj79ZyKsXq34DurkAhYuMickvyxpn3LKTKSSivB+mGy4jSnRt
+                yJ0pNqrU0tOoHj7J0ElMs/A6Qvak6w9Wy6VrWbjKlviEqM0BBRud4Fg61zIO7JR8
+                eValpb2GZFiZmwzm6wHcnWDyFRjYvWytVbwjwwPiO6v5/73sgzk4b48CqqPNNHbX
+                ySoBBifyBEPnDTj8yn3QfT2z46tC34kOqHwBxursM22ZXd6ByycRoraw1fClAwMs
+                rAVyOWWPxmbPQiYLHp9o4QLsNGCpSOLkaA/RFgyIyK/LT8WNPv7qhEhVUHYKEqmv
+                xzM=
                 -----END CERTIFICATE-----
             key: |
                 -----BEGIN PRIVATE KEY-----
-                    dummy cert key
+                MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCViPFTS/8rClBl
+                V/tlPRdkFbgusYL7hLTvcfupMPgCSTZwCGBlijqcY3dwxJJato6nFEm1PSXrkZV5
+                ZVbCPi/aJ1vaTT/627SB6M93lfFA8ftNtS/boJWD0szAB8wEBPx/DdVwXhjlgpR8
+                TAJAXXd6wchff+tBmk2Tn4tMrvSSBlV5UMwCUWfzV/d4/zQUzxhpHgQUum2T3nBm
+                CtMs6zuR2itjPd7ZMv2/NLW8lU0unYsHOcNsgPrJaHghKqilAXLirCd+vjdgY3jZ
+                9ta33OOBAA6XTKqMgoI0Rd3NGLNQYNN9GWu0rapO05vX9DVL5udy4VARyNKqF6c8
+                DU3WJJ4xAgMBAAECggEAB/SBliNYX1NMpJ+SHbgqyuXG5yEFbVkJgSWItF8JCqIX
+                dc1UR4KbjJ9UBtlGSfIlU6kmJLCsmEQl9g/YljvVst7eKZZrfW57w199zghZjdFx
+                w5gMhDweSCWKQ/sGNP6I6j9zp+cxnuAcAyLOCduPFCZEASSegN5zGxPlRr6V/0Cn
+                KRT8N/GTSwl8ofFAKzfnvVJUNM/XgTz5v772RmoTQW8s/BiH7mex0mY4/laWJZTd
+                G25QkHDu9Y7APvBm9CewiAVnImzA4AJgjFiwEdmoSS01O5irYlNaDRZgfxXZQnMb
+                riH0JehM70LC+pO0YywsCBravhavxiC7EpqMd+EWmQKBgQDOstZydm8+P3FKmfIQ
+                hHihREPfNi1P45zGOgpffuwGavvn2UlvVeRAWY+mjHkNW+mEldgAetZkesJfqFsV
+                v5DtV6zRtjz5LVY+d/nY9+hYOXKXPiVF9u2O/cafvq9TVmU6We2OmMrMEOKr8UFe
+                RFe6wAcTFKv8wxTYKl97Q1uWBQKBgQC5M6bcUs9PzXgxe+Xib+oqQA0sT86y6851
+                zYYMj9RsqUcoroUVPYHBGSGr1oZQenskkAsCSrt7geKAwnun2u3YpVNStkRG/cM1
+                2cP7ZbwRxYP21I22rM3Kd0OdQYcM6OJd5s4mw/ZWb5l4FOgmYBtUeal1M1fOiWRz
+                aKSs/AmTPQKBgHgNBuCUSSguUO6zWxSc3DNOIt2R6d9so7G+JCgy34MawBR4713q
+                1RdK7VQeYnCP4aFQJpSgw8S4SAynC8Al81bmhUmIPwG6g0zlAggydJBJTXTqc1uf
+                f3p9is9dQRd2JnUtpfwcYi0D4aNcDEtkBlBBF9rNNtcntwOWGL7O8HLBAoGAHjKb
+                3ITsJLj+BiOLolZZOjZjb3w72dS1P2QZnWa+XlFjtvBt5r62r4Onh9tc3zZ5acbK
+                5L7Gvya4hgIwI3iBG7gpU+1ASMsLz3YIjK9T8RnhoJeb29NlYsP7lGKg4KwAbQs7
+                Rfrh6cocngXarJczHZ0Q0nlisdyZMnA3mbUm4okCgYEAmlkERor0hgk0jOYngQpg
+                aN+Ckl4yrjYKSu/xGOs13A8Q0xh3K9EOK+HdsWjAyrrYfIkRn6X9no+Fqq5iBTXv
+                UpsNWCA0ddoMNAvH4nSSRYevIvwma3pUTAtNKN+1jFWwrYOiSs8IGzIuVCVaezkI
+                NFYcow6EFowIZP+BuVpJb40=
                 -----END PRIVATE KEY-----
-            disabled: false
+            disabled: true
       routingChains:
           - name: fruit-shop-route
             title: Routing-Chain fruit-shop-route
             description: Routing chain for fruit shop request handling.
             rules:
-                - match: request.path == '/set-device-id'
-                  action:
-                      type: setDeviceId
-                      expiration: null
-    - name: development_realm
-      title: 開発システム
-      description: Realm for the development environment.
-      signingKey: |
-            -----BEGIN PUBLIC KEY-----
-            -----END PUBLIC KEY-----
-      signingKey: |
-            -----BEGIN PRIVATE KEY-----
-            -----END PRIVATE KEY-----
-      cacert: |
-            -----BEGIN CERTIFICATE-----
-            MIIDmTCCAoGgAwIBAgIUQFlH+y76TW4GCwvGWEESfT4sTZAwDQYJKoZIhvcNAQEL
-            BQAwXDELMAkGA1UEBhMCSlAxDjAMBgNVBAgMBVRva3lvMQ0wCwYDVQQHDARVZW5v
-            MRQwEgYDVQQKDAtUZXN0U2VydmljZTEYMBYGA1UEAwwPTXlUZXN0U2VydmljZUNB
-            MB4XDTI1MDkyNDA1NDkzNFoXDTM1MDkyMjA1NDkzNFowXDELMAkGA1UEBhMCSlAx
-            DjAMBgNVBAgMBVRva3lvMQ0wCwYDVQQHDARVZW5vMRQwEgYDVQQKDAtUZXN0U2Vy
-            dmljZTEYMBYGA1UEAwwPTXlUZXN0U2VydmljZUNBMIIBIjANBgkqhkiG9w0BAQEF
-            AAOCAQ8AMIIBCgKCAQEAvqP7GuNgv5umIIXK+QqT2auq56x1oSAA+oP4Fmp+sjcO
-            e08QES/LlbXesVRYHHV624qInpdEKTwuENxZi0+mkm5zO09GFlQiKvas3YvN5Ecq
-            aWVoPWHezcXt2K+ogNU1rjPqgENvpKnWtzZPGIHiKnN0/taUR7AotxPg4wV1QVuv
-            EgavXqIFGBhH+Os+6HnCls3XukmMBu3YTxgB6wwYUHbXqzBQNivugXU1AFx1a7tI
-            GRCGEAJiJ//g1mTu8Ji2/XvN/QpkSv5GgjwDToB07ZvRNSOarODOwT37Fr87Nfy1
-            IpIGcmbNcpJik+LNqpyfdUALuLyXAbjjYw7OML9HqwIDAQABo1MwUTAdBgNVHQ4E
-            FgQUKazWF2yeXfg6aTVhYFwTyT3idPQwHwYDVR0jBBgwFoAUKazWF2yeXfg6aTVh
-            YFwTyT3idPQwDwYDVR0TAQH/BAUwAwEB/zANBgkqhkiG9w0BAQsFAAOCAQEAa9Qc
-            TEzjkbIWczZ1h9xDriG8RcST0pmdTR2QMo/UeaJayNjtxp9rEuNVW8Xs7COENtPv
-            wfq/X3RLXh+YBYT2qC0qO1HuAoLOHchxKMEJBJo1QjVkNmJHtIq6sddzm16EmW0o
-            jz2dN3fp1S9PvLwKha8YOMX1R9eiwT7UHAXJjOud6xdF6T8veDvhrFKTsKxgKFkG
-            NoUiNw+rzOVCOuwgt1I7VcfIgA0dmjDz3RlK1nPXroZaeMKgLEAyLPh704h8vvDT
-            ZHgx+Nrf1b+TNgNLxpnmqFH4NWdezFSfvHHRBOY3sFvMJFU81fnk3QTZYnRwrsSD
-            M7eKGakIiHjPZDWOEg==
-            -----END CERTIFICATE-----
-      sessionTimeout: 2592000
-      administrators:
-          - admin1dev@example.com
-          - admin2@devexample.com
       hubs:
-          - name: hub1d
-            title: Hub hub1d
-            description: SpnHub instance for the development environment.
-            fqdn: spnhub.dev.example.com
+          - name: hub2
+            urn: urn:chip-in:network:development:hub2
+            title: Hub hub2
+            description: SpnHub instance for the production environment.
+            fqdn: spnhub.sr.example.com
             serverAddress: "0.0.0.0"
-            serverPort: 9443
+            serverPort: 4444
             serverCert: |
                 -----BEGIN CERTIFICATE-----
                 MIIDwTCCAqmgAwIBAgIUCA/6r1GSV9cc5djXCRP0Q7yy9aEwDQYJKoZIhvcNAQEL
@@ -317,39 +815,85 @@ realms:
                   title: api service
                   description: API service for retrieving fruit product data.
                   availabilityManagement:
-                    serviceId: "svr-api"
-                    clusterManagerUrn: "preconfigured-local-development-Docker-environment-only"
-                    description: "delayed startup triggered by the first payload"
-                    startAt: "not-implemented"
-                    stopAt: "not-implemented"
-                    ondemandStartOnConsumer: false
-                    ondemandStartOnPayload: true
-                    idleTimeout: 0  # no shutdown
-                    image: "svr-api"
-                    command:
-                    options:
-                    env:
-                  provider: urn:chip-in:end-point:hub.master.dev.example.com:api-server
+                      serviceId: "provider-api"
+                      clusterManagerUrn: "preconfigured-local-development-Docker-environment-only"
+                      description: "delayed startup triggered by the first payload"
+                      ondemandStartOnConsumer: false
+                      ondemandStartOnPayload: true
+                      idleTimeout: 0 # no shutdown
+                      image: "provider-api"
+                      command:
+                      options: ["--network", "spnnet"]
+                      env:
+                          DATABASE_URL: "postgres://shopuser:myShopPwABC@127.0.0.1:8432/shopdb"
+                          OIDC_ISSUER_URL_INTERNAL: "http://authserver:8082"
+                          OIDC_ISSUER_URL_EXTERNAL: "http://localhost:8082"
+                          CORS_ALLOWED_ORIGINS: "http://localhost:8080"
+                          SERVER_ADDRESS: "0.0.0.0:8000"
+                  provider: urn:chip-in:end-point:hub.master.sr.example.com:api-server
                   consumers:
-                      - urn:chip-in:end-point:hub.master.dev.example.com:api-gateway
+                      - urn:chip-in:end-point:hub.master.sr.example.com:api-gateway
                   singleton: false
                 - name: auth
                   title: auth service
                   description: OpenID Connect (OIDC) authentication service.
                   availabilityManagement:
-                    serviceId: "svr-auth"
-                    clusterManagerUrn: "preconfigured-local-development-Docker-environment-only"
-                    description: "auto startup triggered when the consumer is ready"
-                    startAt: "not-implemented"
-                    stopAt: "not-implemented"
-                    ondemandStartOnConsumer: true
-                    ondemandStartOnPayload: true
-                    idleTimeout: 0  # no shutdown
-                    image: "svr-auth"
-                    command:
-                    options:
-                    env:
-                  provider: urn:chip-in:end-point:hub.master.dev.example.com:auth-server
+                      serviceId: "provider-auth"
+                      clusterManagerUrn: "preconfigured-local-development-Docker-environment-only"
+                      description: "auto startup triggered when the consumer is ready"
+                      startAt: "not-implemented"
+                      stopAt: "not-implemented"
+                      ondemandStartOnConsumer: true
+                      ondemandStartOnPayload: true
+                      idleTimeout: 0 # no shutdown
+                      image: "provider-auth"
+                      command:
+                      options: ["--network", "spnnet"]
+                      env:
+                  provider: urn:chip-in:end-point:hub.master.sr.example.com:auth-server
                   consumers:
-                      - urn:chip-in:end-point:hub.master.dev.example.com:auth-gateway
+                      - urn:chip-in:end-point:hub.master.sr.example.com:auth-gateway
+                  singleton: false
+                - name: database
+                  title: database service
+                  description: Database service for the fruit shop.
+                  availabilityManagement:
+                      serviceId: "provider-db"
+                      clusterManagerUrn: "preconfigured-local-development-Docker-environment-only"
+                      description: "auto startup triggered when the consumer is ready"
+                      startAt: "not-implemented"
+                      stopAt: "not-implemented"
+                      ondemandStartOnConsumer: true
+                      ondemandStartOnPayload: true
+                      idleTimeout: 0 # no shutdown
+                      image: "provider-db"
+                      command:
+                      options: ["--network", "spnnet"]
+                      env:
+                          POSTGRES_DB: "shopdb"
+                          POSTGRES_USER: "shopuser"
+                          POSTGRES_PASSWORD: "myShopPwABC"
+                  provider: urn:chip-in:end-point:hub.master.sr.example.com:database-server
+                  consumers:
+                      - urn:chip-in:end-point:hub.master.sr.example.com:database-client
+                  singleton: false
+                - name: www
+                  title: www service
+                  description: Web frontend service for the fruit shop.
+                  availabilityManagement:
+                      serviceId: "provider-www"
+                      clusterManagerUrn: "preconfigured-local-development-Docker-environment-only"
+                      description: "delayed startup triggered by the first payload"
+                      startAt: "not-implemented"
+                      stopAt: "not-implemented"
+                      ondemandStartOnConsumer: false
+                      ondemandStartOnPayload: true
+                      idleTimeout: 0 # no shutdown
+                      image: "provider-www"
+                      command:
+                      options: ["--network", "spnnet"]
+                      env:
+                  provider: urn:chip-in:end-point:hub.master.sr.example.com:www-server
+                  consumers:
+                      - urn:chip-in:end-point:hub.master.sr.example.com:www-gateway
                   singleton: false
