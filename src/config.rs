@@ -122,6 +122,8 @@ pub struct RealmConfig {
     pub realm_name: String,
     #[serde(rename = "cacert")]
     pub realm_ca_cert: String,
+    #[serde(default)]
+    pub disabled: bool,
     pub hubs: Vec<HubConfig>,
 }
 

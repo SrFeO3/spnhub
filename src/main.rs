@@ -81,6 +81,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut handles = Vec::new();
 
     for realm in &config.realms {
+        if realm.disabled {
+            info!("Skipping disabled realm: {}", realm.realm_name);
+            continue;
+        }
+
         for hub in &realm.hubs {
             info!("Starting hub: {} (Realm: {})", hub.name, realm.realm_name);
 
