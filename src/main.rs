@@ -150,9 +150,8 @@ struct Server {
     /// Key: Service name -> Inner Key: Provider URI (CN) -> Value: QUIC connection.
     provider_connections: Arc<RwLock<HashMap<String, HashMap<String, quinn::Connection>>>>,
     /// A map storing consumer connections.
-    /// Key: Consumer URI (CN) -> Value: QUIC connection.
-    consumer_connections: Arc<RwLock<HashMap<String, quinn::Connection>>>,
-    /// A map for looking up the service name associated with a given endpoint URI (CN).
+    /// Key: Consumer URI (CN) -> Inner Key: Connection ID -> Value: QUIC connection.
+    consumer_connections: Arc<RwLock<HashMap<String, HashMap<usize, quinn::Connection>>>>,
     service_map: Arc<HashMap<String, String>>,
     /// Shared application configuration, used for features like on-demand start.
     shared_config: Arc<ArcSwap<crate::config::AppConfig>>,
@@ -163,7 +162,7 @@ impl Server {
     fn new(
         endpoint: quinn::Endpoint,
         provider_connections: Arc<RwLock<HashMap<String, HashMap<String, quinn::Connection>>>>,
-        consumer_connections: Arc<RwLock<HashMap<String, quinn::Connection>>>,
+        consumer_connections: Arc<RwLock<HashMap<String, HashMap<usize, quinn::Connection>>>>,
         service_map: Arc<HashMap<String, String>>,
         shared_config: Arc<ArcSwap<crate::config::AppConfig>>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
@@ -301,7 +300,7 @@ impl Server {
     /// Reports server statistics.
     async fn report_stats(
         providers: &Arc<RwLock<HashMap<String, HashMap<String, quinn::Connection>>>>,
-        consumers: &Arc<RwLock<HashMap<String, quinn::Connection>>>,
+        consumers: &Arc<RwLock<HashMap<String, HashMap<usize, quinn::Connection>>>>,
         service_map: &Arc<HashMap<String, String>>,
     ) {
         // 1. Create snapshots to minimize lock duration
@@ -310,7 +309,7 @@ impl Server {
             let consumers_lock = consumers.read().await;
 
             let provider_count: usize = providers_lock.values().map(|v| v.len()).sum();
-            let consumer_count = consumers_lock.len();
+            let consumer_count: usize = consumers_lock.values().map(|v| v.len()).sum();
 
             let provider_snapshot: Vec<_> = providers_lock
                 .iter()
@@ -321,7 +320,9 @@ impl Server {
 
             let consumer_snapshot: Vec<_> = consumers_lock
                 .iter()
-                .map(|(uri, conn)| (uri.clone(), conn.clone()))
+                .flat_map(|(uri, conns)| {
+                    conns.iter().map(move |(_id, conn)| (uri.clone(), conn.clone()))
+                })
                 .collect();
 
             (
@@ -548,7 +549,7 @@ struct ConsumerHandler {
     context: ConnectionContext,
     target_provider: Option<quinn::Connection>,
     provider_connections: Arc<RwLock<HashMap<String, HashMap<String, quinn::Connection>>>>,
-    consumer_connections: Arc<RwLock<HashMap<String, quinn::Connection>>>,
+    consumer_connections: Arc<RwLock<HashMap<String, HashMap<usize, quinn::Connection>>>>,
     /// Provider URN
     provider_urn: Option<String>,
     /// Availability management configuration for provider.
@@ -571,7 +572,7 @@ impl ConsumerHandler {
         connection: quinn::Connection,
         cn: String,
         provider_connections: Arc<RwLock<HashMap<String, HashMap<String, quinn::Connection>>>>,
-        consumer_connections: Arc<RwLock<HashMap<String, quinn::Connection>>>,
+        consumer_connections: Arc<RwLock<HashMap<String, HashMap<usize, quinn::Connection>>>>,
         service_map: Arc<HashMap<String, String>>,
         shared_config: Arc<ArcSwap<crate::config::AppConfig>>,
     ) -> Self {
@@ -888,12 +889,15 @@ impl ConsumerHandler {
 
         // Add the connection to the shared map.
         {
-            let mut consumers = self.consumer_connections.write().await;
-            consumers.insert(self.context.uri.clone(), self.context.connection.clone());
+            let mut consumers_by_uri = self.consumer_connections.write().await;
+            consumers_by_uri
+                .entry(self.context.uri.clone())
+                .or_default()
+                .insert(self.context.connection_id, self.context.connection.clone());
+            let total_consumers: usize = consumers_by_uri.values().map(|v| v.len()).sum();
             info!(
                 "Consumer '{}' added to connection map. (Total: {})",
-                self.context.uri,
-                consumers.len()
+                self.context.uri, total_consumers
             );
         }
 
@@ -936,12 +940,17 @@ impl ConsumerHandler {
 
         // Remove the connection from the shared map upon disconnection.
         {
-            let mut consumers = self.consumer_connections.write().await;
-            consumers.remove(&self.context.uri);
+            let mut consumers_by_uri = self.consumer_connections.write().await;
+            if let Some(conns_for_uri) = consumers_by_uri.get_mut(&self.context.uri) {
+                conns_for_uri.remove(&self.context.connection_id);
+                if conns_for_uri.is_empty() {
+                    consumers_by_uri.remove(&self.context.uri);
+                }
+            }
+            let total_consumers: usize = consumers_by_uri.values().map(|v| v.len()).sum();
             info!(
                 "Consumer '{}' removed from connection map. (Total remaining: {})",
-                self.context.uri,
-                consumers.len()
+                self.context.uri, total_consumers
             );
         }
 
