@@ -45,10 +45,10 @@
 //!     let config_path = "config.yaml".to_string();
 //!
 //!     // Load initial config
-//!     let initial_config = load_initial_config(&config_path).expect("Failed to load configuration");
+//!     let (initial_config, initial_content) = load_initial_config(&config_path).expect("Failed to load configuration");
 //!
 //!     // Create shared storage (ArcSwap allows lock-free reads)
-//!     let shared_config = Arc::new(ArcSwap::from_pointee(initial_config));
+//!     let reload_service = ConfigHotReloadService::new(config_path.clone(), shared_config.clone(), initial_content);
 //!
 //!     // Start hot-reload service in a background task
 //!     let reload_service = ConfigHotReloadService::new(config_path.clone(), shared_config.clone());
@@ -104,8 +104,6 @@ use arc_swap::ArcSwap;
 use serde::Deserialize;
 use tracing::{info, warn};
 use tokio::sync::Mutex;
-use tokio::time;
-use tokio::time::Duration;
 
 /// Application-wide configuration structure
 #[derive(Debug, Deserialize, Clone)]
@@ -181,42 +179,30 @@ pub struct ConfigHotReloadService {
 }
 
 impl ConfigHotReloadService {
-    pub fn new(config_path: String, shared_config: Arc<ArcSwap<AppConfig>>) -> Self {
+    pub fn new(config_path: String, shared_config: Arc<ArcSwap<AppConfig>>, initial_content: String) -> Self {
         Self {
             config_path,
             shared_config,
-            last_known_content: Mutex::new(String::new()),
+            last_known_content: Mutex::new(initial_content),
         }
     }
 
-    /// Starts the monitoring loop
-    pub async fn start(&self) {
-        let mut interval = time::interval(Duration::from_secs(10));
-        loop {
-            interval.tick().await;
-            self.check_and_reload().await;
-        }
-    }
-
-    async fn check_and_reload(&self) {
+    pub async fn check_and_reload(&self) {
         match tokio::fs::read_to_string(&self.config_path).await {
             Ok(current_content) => {
                 let mut last_content = self.last_known_content.lock().await;
                 if *last_content != current_content {
-                    // If last_content is empty (e.g., on initial startup), just update without logging
-                    let is_reload = !last_content.is_empty();
-
-                    if is_reload {
-                        info!("Configuration file change detected. Attempting to reload...");
+                    if !last_content.is_empty() {
+                        info!("Hot reload signal received. Configuration change detected. Reloading...");
+                    } else {
+                        info!("Hot reload signal received. Initializing configuration state.");
                     }
 
                     match serde_yaml::from_str::<AppConfig>(&current_content) {
                         Ok(new_config) => {
                             self.shared_config.store(Arc::new(new_config));
                             *last_content = current_content;
-                            if is_reload {
-                                info!("Successfully reloaded and applied new configuration.");
-                            }
+                            info!("Successfully reloaded and applied new configuration.");
                         }
                         Err(e) => {
                             warn!(
@@ -225,6 +211,8 @@ impl ConfigHotReloadService {
                             );
                         }
                     }
+                } else {
+                    info!("Hot reload signal received. No configuration change detected.");
                 }
             }
             Err(e) => {
@@ -238,10 +226,10 @@ impl ConfigHotReloadService {
 }
 
 /// Loads the initial configuration
-pub fn load_initial_config(path: &str) -> Result<AppConfig, Box<dyn std::error::Error>> {
+pub fn load_initial_config(path: &str) -> Result<(AppConfig, String), Box<dyn std::error::Error>> {
     let content = fs::read_to_string(path)
         .map_err(|e| format!("Failed to read configuration file '{}': {}", path, e))?;
     let config = serde_yaml::from_str(&content)
         .map_err(|e| format!("Failed to parse configuration file '{}': {}", path, e))?;
-    Ok(config)
+    Ok((config, content))
 }

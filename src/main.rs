@@ -19,6 +19,7 @@ use arc_swap::ArcSwap;
 use chrono::{DateTime, Utc};
 use clap::Parser;
 use rustls::crypto::ring::default_provider;
+use tokio::signal::unix::{signal, SignalKind};
 use tokio::sync::{mpsc, RwLock};
 use tokio::time::{self, Duration, Instant};
 use tracing::{Instrument, error, info, info_span, warn};
@@ -72,14 +73,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
     // Load initial config
-    let initial_config = load_initial_config(&args.config)?;
+    let (initial_config, initial_content) = load_initial_config(&args.config)?;
     let shared_config = Arc::new(ArcSwap::from_pointee(initial_config.clone()));
 
     // Start hot-reload service
-    let reload_service = ConfigHotReloadService::new(args.config.clone(), shared_config.clone());
-    tokio::spawn(async move {
-        reload_service.start().await;
-    });
+    let reload_service = ConfigHotReloadService::new(args.config.clone(), shared_config.clone(), initial_content);
 
     //  QUIC setup
     default_provider()
@@ -149,8 +147,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("All hubs started. Waiting for connections...");
 
     // Wait for Ctrl-C
-    tokio::signal::ctrl_c().await?;
-    info!("Ctrl-C received, shutting down...");
+    let mut sigusr1 = signal(SignalKind::user_defined1())?;
+    loop {
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {
+                info!("Ctrl-C received, shutting down...");
+                break;
+            }
+            _ = sigusr1.recv() => {
+                info!("SIGUSR1 received, reloading configuration...");
+                reload_service.check_and_reload().await;
+            }
+        }
+    }
 
     // Wait for all servers to finish
     for handle in handles {
