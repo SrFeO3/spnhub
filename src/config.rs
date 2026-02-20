@@ -187,7 +187,7 @@ impl ConfigHotReloadService {
         }
     }
 
-    pub async fn check_and_reload(&self) {
+    pub async fn check_and_reload(&self) -> Option<AppConfig> {
         match tokio::fs::read_to_string(&self.config_path).await {
             Ok(current_content) => {
                 let mut last_content = self.last_known_content.lock().await;
@@ -200,9 +200,10 @@ impl ConfigHotReloadService {
 
                     match serde_yaml::from_str::<AppConfig>(&current_content) {
                         Ok(new_config) => {
-                            self.shared_config.store(Arc::new(new_config));
+                            self.shared_config.store(Arc::new(new_config.clone()));
                             *last_content = current_content;
                             info!("Successfully reloaded and applied new configuration.");
+                            return Some(new_config);
                         }
                         Err(e) => {
                             warn!(
@@ -222,6 +223,7 @@ impl ConfigHotReloadService {
                 );
             }
         }
+        None
     }
 }
 

@@ -12,6 +12,7 @@
 //! - Replace target provider on consumer reconnection.
 
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -29,7 +30,7 @@ mod config;
 mod microservice;
 mod utils;
 
-use crate::config::{ConfigHotReloadService, load_initial_config};
+use crate::config::{AppConfig, ConfigHotReloadService, HubConfig, RealmConfig, load_initial_config};
 
 const MAX_CONCURRENT_UNI_STREAMS: u8 = 0;
 const KEEP_ALIVE_INTERVAL_SECS: u64 = 5;
@@ -55,6 +56,13 @@ struct Args {
 struct ServiceInfo {
     name: String,
     urn: String,
+}
+
+type HubKey = (String, String); // (RealmName, HubName)
+
+struct RunningHub {
+    handle: tokio::task::JoinHandle<()>,
+    shutdown_tx: mpsc::Sender<()>,
 }
 
 #[tokio::main]
@@ -84,65 +92,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .install_default()
         .expect("Failed to install crypto provider");
 
-    let config = shared_config.load();
-    let mut handles = Vec::new();
+    let mut running_hubs: HashMap<HubKey, RunningHub> = HashMap::new();
 
-    for realm in &config.realms {
-        if realm.disabled {
-            info!("Skipping disabled realm: {}", realm.realm_name);
-            continue;
-        }
-
-        for hub in &realm.hubs {
-            info!("Starting hub: {} (Realm: {})", hub.name, realm.realm_name);
-
-            let (certs, key, truststore) = utils::load_certs_and_key_from_strings(
-                &hub.server_cert,
-                &hub.server_cert_key,
-                &realm.realm_ca_cert,
-            )?;
-
-            let endpoint = utils::create_quic_server_endpoint(
-                &hub.server_address,
-                hub.server_port,
-                certs,
-                key,
-                truststore,
-                &[b"sc01-provider", b"sc01-consumer"],
-            )?;
-
-            // Create a shared state for provider connections and consumer connections
-            let provider_connections = Arc::new(RwLock::new(HashMap::new()));
-            let consumer_connections = Arc::new(RwLock::new(HashMap::new()));
-
-            let mut service_map: HashMap<String, ServiceInfo> = HashMap::new();
-            for service in &hub.services {
-                let service_info = ServiceInfo {
-                    name: service.name.clone(),
-                    urn: service.urn.clone(),
-                };
-                service_map.insert(service.provider.clone(), service_info.clone());
-                for consumer in &service.consumers {
-                    service_map.insert(consumer.clone(), service_info.clone());
-                }
-            }
-            info!("Service map for hub {}: {:?}", hub.name, service_map);
-            let service_map = Arc::new(service_map);
-
-            let server = Server::new(
-                endpoint,
-                provider_connections,
-                consumer_connections,
-                service_map,
-                shared_config.clone(),
-            )?;
-
-            let handle = tokio::spawn(async move {
-                server.run().await;
-            });
-            handles.push(handle);
-        }
-    }
+    // Initial start
+    reconcile_hubs(&initial_config, &mut running_hubs, shared_config.clone()).await;
 
     info!("All hubs started. Waiting for connections...");
 
@@ -155,22 +108,139 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 break;
             }
             _ = sigusr1.recv() => {
-                info!("SIGUSR1 received, reloading configuration...");
-                reload_service.check_and_reload().await;
+                if let Some(new_config) = reload_service.check_and_reload().await {
+                    reconcile_hubs(&new_config, &mut running_hubs, shared_config.clone()).await;
+                }
             }
         }
     }
 
     // Wait for all servers to finish
-    for handle in handles {
-        let _ = handle.await;
+    for (_, hub) in running_hubs {
+        let _ = hub.shutdown_tx.send(()).await;
+        let _ = hub.handle.await;
     }
 
     Ok(())
 }
 
+async fn reconcile_hubs(
+    config: &AppConfig,
+    running_hubs: &mut HashMap<HubKey, RunningHub>,
+    shared_config: Arc<ArcSwap<AppConfig>>,
+) {
+    let mut desired_keys = HashSet::new();
+
+    for realm in &config.realms {
+        if realm.disabled {
+            continue;
+        }
+        for hub in &realm.hubs {
+            desired_keys.insert((realm.realm_name.clone(), hub.name.clone()));
+        }
+    }
+
+    // Remove hubs that are no longer in the config
+    let mut to_remove = Vec::new();
+    for k in running_hubs.keys() {
+        if !desired_keys.contains(k) {
+            to_remove.push(k.clone());
+        }
+    }
+
+    for k in to_remove {
+        if let Some(hub) = running_hubs.remove(&k) {
+            info!("Stopping hub: {} (Realm: {})", k.1, k.0);
+            let _ = hub.shutdown_tx.send(()).await;
+            // We let the task finish in the background
+        }
+    }
+
+    // Add new hubs
+    for realm in &config.realms {
+        if realm.disabled {
+            info!("Skipping disabled realm: {}", realm.realm_name);
+            continue;
+        }
+        for hub in &realm.hubs {
+            let key = (realm.realm_name.clone(), hub.name.clone());
+            if !running_hubs.contains_key(&key) {
+                info!("Starting hub: {} (Realm: {})", hub.name, realm.realm_name);
+                match start_hub(realm, hub, shared_config.clone()).await {
+                    Ok(running_hub) => {
+                        running_hubs.insert(key, running_hub);
+                    }
+                    Err(e) => {
+                        error!("Failed to start hub {}: {}", hub.name, e);
+                    }
+                }
+            }
+        }
+    }
+}
+
+async fn start_hub(
+    realm: &RealmConfig,
+    hub: &HubConfig,
+    shared_config: Arc<ArcSwap<AppConfig>>,
+) -> Result<RunningHub, Box<dyn std::error::Error>> {
+    let (certs, key, truststore) = utils::load_certs_and_key_from_strings(
+        &hub.server_cert,
+        &hub.server_cert_key,
+        &realm.realm_ca_cert,
+    )?;
+
+    let endpoint = utils::create_quic_server_endpoint(
+        &hub.server_address,
+        hub.server_port,
+        certs,
+        key,
+        truststore,
+        &[b"sc01-provider", b"sc01-consumer"],
+    )?;
+
+    let provider_connections = Arc::new(RwLock::new(HashMap::new()));
+    let consumer_connections = Arc::new(RwLock::new(HashMap::new()));
+
+    let mut service_map: HashMap<String, ServiceInfo> = HashMap::new();
+    for service in &hub.services {
+        let service_info = ServiceInfo {
+            name: service.name.clone(),
+            urn: service.urn.clone(),
+        };
+        service_map.insert(service.provider.clone(), service_info.clone());
+        for consumer in &service.consumers {
+            service_map.insert(consumer.clone(), service_info.clone());
+        }
+    }
+    info!("Service map for hub {}: {:?}", hub.name, service_map);
+    let service_map = Arc::new(service_map);
+
+    let server = Server::new(
+        realm.realm_name.clone(),
+        hub.name.clone(),
+        endpoint,
+        provider_connections,
+        consumer_connections,
+        service_map,
+        shared_config,
+    )?;
+
+    let (shutdown_tx, shutdown_rx) = mpsc::channel(1);
+    let handle = tokio::spawn(async move {
+        server.run(shutdown_rx).await;
+    });
+
+    Ok(RunningHub {
+        handle,
+        shutdown_tx,
+    })
+}
+
 /// Manages the overall lifecycle of the server.
 struct Server {
+    realm_name: String,
+    hub_name: String,
     /// The QUIC endpoint bound to the server socket.
     endpoint: quinn::Endpoint,
     /// A map storing provider connections.
@@ -187,14 +257,18 @@ struct Server {
 impl Server {
     /// Creates a new server instance.
     fn new(
+        realm_name: String,
+        hub_name: String,
         endpoint: quinn::Endpoint,
         provider_connections: Arc<RwLock<HashMap<String, HashMap<String, ProviderEntry>>>>,
         consumer_connections: Arc<RwLock<HashMap<String, HashMap<usize, ConsumerEntry>>>>,
         service_map: Arc<HashMap<String, ServiceInfo>>,
         shared_config: Arc<ArcSwap<crate::config::AppConfig>>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        info!("Listening on {}", endpoint.local_addr()?);
+        info!("Listening on {} (Realm: {}, Hub: {})", endpoint.local_addr()?, realm_name, hub_name);
         Ok(Self {
+            realm_name,
+            hub_name,
             endpoint,
             provider_connections,
             consumer_connections,
@@ -204,26 +278,24 @@ impl Server {
     }
 
     /// Runs the main server loop to accept connections.
-    async fn run(&self) {
-        info!("Server is ready to accept connections.");
+    async fn run(&self, mut shutdown_rx: mpsc::Receiver<()>) {
+        info!("Server (Realm: {}, Hub: {}) is ready to accept connections.", self.realm_name, self.hub_name);
 
-        // Spawn a background task for periodic statistics logging.
-        let providers = self.provider_connections.clone();
-        let consumers = self.consumer_connections.clone();
-        let service_map = self.service_map.clone();
-        tokio::spawn(async move {
-            let mut interval = time::interval(Duration::from_secs(10));
-            // Prevent tick buildup if processing lags
-            interval.set_missed_tick_behavior(time::MissedTickBehavior::Skip);
-
-            loop {
-                interval.tick().await;
-                Self::report_stats(&providers, &consumers, &service_map).await;
-            }
-        });
+        let mut stats_interval = time::interval(Duration::from_secs(10));
+        // Prevent tick buildup if processing lags
+        stats_interval.set_missed_tick_behavior(time::MissedTickBehavior::Skip);
 
         loop {
             tokio::select! {
+                _ = stats_interval.tick() => {
+                    Self::report_stats(
+                        &self.realm_name,
+                        &self.hub_name,
+                        &self.provider_connections,
+                        &self.consumer_connections,
+                        &self.service_map
+                    ).await;
+                }
                 Some(connecting) = self.endpoint.accept() => {
                     info!("Connection incoming from {}", connecting.remote_address());
 
@@ -309,8 +381,8 @@ impl Server {
                         }
                     });
                 }
-                _ = tokio::signal::ctrl_c() => {
-                    info!("Ctrl-C received, starting graceful shutdown.");
+                _ = shutdown_rx.recv() => {
+                    info!("Shutdown signal received, starting graceful shutdown.");
                     break;
                 }
             }
@@ -321,11 +393,13 @@ impl Server {
 
         // Wait for all connections to be gracefully shut down.
         self.endpoint.wait_idle().await;
-        info!("Shutdown complete.");
+        info!("Shutdown complete (Realm: {}, Hub: {}).", self.realm_name, self.hub_name);
     }
 
     /// Reports server statistics.
     async fn report_stats(
+        realm_name: &str,
+        hub_name: &str,
         providers: &Arc<RwLock<HashMap<String, HashMap<String, ProviderEntry>>>>,
         consumers: &Arc<RwLock<HashMap<String, HashMap<usize, ConsumerEntry>>>>,
         service_map: &Arc<HashMap<String, ServiceInfo>>,
@@ -370,6 +444,8 @@ impl Server {
 
         info!(
             message = "Stats",
+            realm = realm_name,
+            hub = hub_name,
             total_connections = provider_count + consumer_count,
             tokio_workers,
             tokio_tasks,
@@ -382,6 +458,8 @@ impl Server {
             let stats = conn.stats();
             info!(
                 type = "provider",
+                realm = realm_name,
+                hub = hub_name,
                 service,
                 cn,
                 id = conn.stable_id(),
@@ -397,6 +475,8 @@ impl Server {
             let service = service_map.get(&uri).map(|s| s.name.as_str()).unwrap_or("unknown");
             info!(
                 type = "consumer",
+                realm = realm_name,
+                hub = hub_name,
                 service,
                 uri,
                 id = conn.stable_id(),
