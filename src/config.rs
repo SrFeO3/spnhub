@@ -106,14 +106,14 @@ use tracing::{info, warn};
 use tokio::sync::Mutex;
 
 /// Application-wide configuration structure
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct AppConfig {
     pub realms: Vec<RealmConfig>,
 }
 
 /// Realm configuration
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct RealmConfig {
     #[serde(rename = "name")]
@@ -125,8 +125,8 @@ pub struct RealmConfig {
     pub hubs: Vec<HubConfig>,
 }
 
-/// Hub configuration mapping directly to config.yaml
-#[derive(Debug, Deserialize, Clone)]
+/// Hub configuration
+#[derive(Debug, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct HubConfig {
     pub name: String,
@@ -141,7 +141,7 @@ pub struct HubConfig {
 }
 
 /// Service configuration
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ServiceConfig {
     pub name: String,
@@ -155,7 +155,7 @@ pub struct ServiceConfig {
 }
 
 /// Availability management configuration for a service
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct AvailabilityManagementConfig {
     pub _service_id: String,

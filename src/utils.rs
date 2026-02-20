@@ -74,14 +74,12 @@ pub fn load_certs_and_key_from_strings(
 /// # Returns
 ///
 /// A `Result` containing the configured `quinn::Endpoint` on success, or a `Box<dyn Error>` on failure.
-pub fn create_quic_server_endpoint(
-    sc_server_address: &String,
-    sc_server_port: u16,
+pub fn create_server_config(
     certs: Vec<CertificateDer<'static>>,
     key: PrivateKeyDer<'static>,
     truststore: quinn::rustls::RootCertStore,
     alpn_protocols: &[&[u8]],
-) -> Result<quinn::Endpoint, Box<dyn Error>> {
+) -> Result<quinn::ServerConfig, Box<dyn Error>> {
     let cert_verifier = quinn::rustls::server::WebPkiClientVerifier::builder(Arc::new(truststore))
         //.allow_unauthenticated()
         .build()
@@ -92,11 +90,6 @@ pub fn create_quic_server_endpoint(
         .with_single_cert(certs, key)?;
     server_config.alpn_protocols = alpn_protocols.iter().map(|&x| x.into()).collect();
 
-    let server_addrs = (sc_server_address.to_string(), sc_server_port)
-        .to_socket_addrs()?
-        .next()
-        .unwrap();
-
     let mut quinn_server_config
         = quinn::ServerConfig::with_crypto(Arc::new(QuicServerConfig::try_from(Arc::new(server_config))?));
     Arc::get_mut(&mut quinn_server_config.transport)
@@ -105,6 +98,24 @@ pub fn create_quic_server_endpoint(
         .keep_alive_interval(Some(Duration::from_secs(crate::KEEP_ALIVE_INTERVAL_SECS)))
         .datagram_receive_buffer_size(Some(crate::DATAGRAM_RECEIVE_BUFFER_SIZE))
         .max_idle_timeout(Some(Duration::from_secs(crate::IDLE_TIMEOUT_SECS).try_into()?));
+
+    Ok(quinn_server_config)
+}
+
+pub fn create_quic_server_endpoint(
+    sc_server_address: &String,
+    sc_server_port: u16,
+    certs: Vec<CertificateDer<'static>>,
+    key: PrivateKeyDer<'static>,
+    truststore: quinn::rustls::RootCertStore,
+    alpn_protocols: &[&[u8]],
+) -> Result<quinn::Endpoint, Box<dyn Error>> {
+    let quinn_server_config = create_server_config(certs, key, truststore, alpn_protocols)?;
+
+    let server_addrs = (sc_server_address.to_string(), sc_server_port)
+        .to_socket_addrs()?
+        .next()
+        .unwrap();
 
     let endpoint = quinn::Endpoint::server(quinn_server_config, server_addrs)?;
 

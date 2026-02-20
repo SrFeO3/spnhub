@@ -12,7 +12,6 @@
 //! - Replace target provider on consumer reconnection.
 
 use std::collections::HashMap;
-use std::collections::HashSet;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -63,6 +62,9 @@ type HubKey = (String, String); // (RealmName, HubName)
 struct RunningHub {
     handle: tokio::task::JoinHandle<()>,
     shutdown_tx: mpsc::Sender<()>,
+    config: HubConfig,
+    realm_ca_cert: String,
+    endpoint: quinn::Endpoint,
 }
 
 #[tokio::main]
@@ -129,34 +131,72 @@ async fn reconcile_hubs(
     running_hubs: &mut HashMap<HubKey, RunningHub>,
     shared_config: Arc<ArcSwap<AppConfig>>,
 ) {
-    let mut desired_keys = HashSet::new();
+    // 1. Identify hubs that need to be stopped (removed or port changed)
+    let mut to_stop = Vec::new();
+    for (key, running_hub) in running_hubs.iter_mut() {
+        let (realm_name, hub_name) = key;
 
-    for realm in &config.realms {
-        if realm.disabled {
-            continue;
-        }
-        for hub in &realm.hubs {
-            desired_keys.insert((realm.realm_name.clone(), hub.name.clone()));
+        // Find corresponding hub in new config
+        let new_config_entry = config.realms.iter()
+            .find(|r| r.realm_name == *realm_name && !r.disabled)
+            .and_then(|r| r.hubs.iter().find(|h| h.name == *hub_name).map(|h| (r, h)));
+
+        match new_config_entry {
+            None => {
+                // Not found in new config (or realm disabled) -> Remove
+                to_stop.push(key.clone());
+            },
+            Some((new_realm, new_hub)) => {
+                // Check if restart is needed (Address/Port change)
+                if running_hub.config.server_address != new_hub.server_address ||
+                   running_hub.config.server_port != new_hub.server_port {
+                    info!("Network configuration changed for hub: {} (Realm: {}). Restarting...", hub_name, realm_name);
+                    to_stop.push(key.clone());
+                } else {
+                    // Check if certificate update is needed
+                    if running_hub.config.server_cert != new_hub.server_cert ||
+                       running_hub.config.server_cert_key != new_hub.server_cert_key ||
+                       running_hub.realm_ca_cert != new_realm.realm_ca_cert {
+                        info!("Certificate changed for hub: {}. Reloading certificates...", hub_name);
+                        match utils::load_certs_and_key_from_strings(&new_hub.server_cert, &new_hub.server_cert_key, &new_realm.realm_ca_cert) {
+                            Ok((certs, key, truststore)) => {
+                                match utils::create_server_config(certs, key, truststore, &[b"sc01-provider", b"sc01-consumer"]) {
+                                    Ok(server_config) => {
+                                        running_hub.endpoint.set_server_config(Some(server_config));
+                                        info!("Certificates reloaded for hub: {}", hub_name);
+                                    }
+                                    Err(e) => {
+                                        error!("Failed to create server config for hub {}: {}", hub_name, e);
+                                        continue;
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                error!("Failed to load certificates for hub {}: {}", hub_name, e);
+                                continue;
+                            }
+                        }
+                    }
+
+                    // Update stored config state
+                    running_hub.config = new_hub.clone();
+                    running_hub.realm_ca_cert = new_realm.realm_ca_cert.clone();
+                }
+            }
         }
     }
 
-    // Remove hubs that are no longer in the config
-    let mut to_remove = Vec::new();
-    for k in running_hubs.keys() {
-        if !desired_keys.contains(k) {
-            to_remove.push(k.clone());
-        }
-    }
-
-    for k in to_remove {
+    // 2. Stop removed/restarting hubs
+    for k in to_stop {
         if let Some(hub) = running_hubs.remove(&k) {
             info!("Stopping hub: {} (Realm: {})", k.1, k.0);
             let _ = hub.shutdown_tx.send(()).await;
-            // We let the task finish in the background
+            let _ = hub.handle.await; // Wait for release port
+            info!("Hub stopped: {} (Realm: {})", k.1, k.0);
         }
     }
 
-    // Add new hubs
+    // 3. Start new hubs
     for realm in &config.realms {
         if realm.disabled {
             info!("Skipping disabled realm: {}", realm.realm_name);
@@ -219,7 +259,7 @@ async fn start_hub(
     let server = Server::new(
         realm.realm_name.clone(),
         hub.name.clone(),
-        endpoint,
+        endpoint.clone(),
         provider_connections,
         consumer_connections,
         service_map,
@@ -234,6 +274,9 @@ async fn start_hub(
     Ok(RunningHub {
         handle,
         shutdown_tx,
+        config: hub.clone(),
+        realm_ca_cert: realm.realm_ca_cert.clone(),
+        endpoint,
     })
 }
 
