@@ -147,6 +147,7 @@ pub struct HubConfig {
 #[serde(rename_all = "camelCase")]
 pub struct ServiceConfig {
     pub name: String,
+    pub urn: String,
     pub _title: String,
     pub _description: String,
     pub availability_management: AvailabilityManagementConfig,

@@ -13,6 +13,7 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use arc_swap::ArcSwap;
 use chrono::{DateTime, Utc};
@@ -46,6 +47,13 @@ struct Args {
     // spn_inventory_url: String,
     #[arg(long, default_value = "conf/config.yaml")]
     config: String,
+}
+
+/// Service information looked up from the config.
+#[derive(Clone, Debug)]
+struct ServiceInfo {
+    name: String,
+    urn: String,
 }
 
 #[tokio::main]
@@ -109,11 +117,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let provider_connections = Arc::new(RwLock::new(HashMap::new()));
             let consumer_connections = Arc::new(RwLock::new(HashMap::new()));
 
-            let mut service_map = HashMap::new();
+            let mut service_map: HashMap<String, ServiceInfo> = HashMap::new();
             for service in &hub.services {
-                service_map.insert(service.provider.clone(), service.name.clone());
+                let service_info = ServiceInfo {
+                    name: service.name.clone(),
+                    urn: service.urn.clone(),
+                };
+                service_map.insert(service.provider.clone(), service_info.clone());
                 for consumer in &service.consumers {
-                    service_map.insert(consumer.clone(), service.name.clone());
+                    service_map.insert(consumer.clone(), service_info.clone());
                 }
             }
             info!("Service map for hub {}: {:?}", hub.name, service_map);
@@ -157,8 +169,8 @@ struct Server {
     provider_connections: Arc<RwLock<HashMap<String, HashMap<String, ProviderEntry>>>>,
     /// A map storing consumer connections.
     /// Key: Consumer URI (CN) -> Inner Key: Connection ID -> Value: QUIC connection.
-    consumer_connections: Arc<RwLock<HashMap<String, HashMap<usize, quinn::Connection>>>>,
-    service_map: Arc<HashMap<String, String>>,
+    consumer_connections: Arc<RwLock<HashMap<String, HashMap<usize, ConsumerEntry>>>>,
+    service_map: Arc<HashMap<String, ServiceInfo>>,
     /// Shared application configuration, used for features like on-demand start.
     shared_config: Arc<ArcSwap<crate::config::AppConfig>>,
 }
@@ -168,8 +180,8 @@ impl Server {
     fn new(
         endpoint: quinn::Endpoint,
         provider_connections: Arc<RwLock<HashMap<String, HashMap<String, ProviderEntry>>>>,
-        consumer_connections: Arc<RwLock<HashMap<String, HashMap<usize, quinn::Connection>>>>,
-        service_map: Arc<HashMap<String, String>>,
+        consumer_connections: Arc<RwLock<HashMap<String, HashMap<usize, ConsumerEntry>>>>,
+        service_map: Arc<HashMap<String, ServiceInfo>>,
         shared_config: Arc<ArcSwap<crate::config::AppConfig>>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         info!("Listening on {}", endpoint.local_addr()?);
@@ -306,8 +318,8 @@ impl Server {
     /// Reports server statistics.
     async fn report_stats(
         providers: &Arc<RwLock<HashMap<String, HashMap<String, ProviderEntry>>>>,
-        consumers: &Arc<RwLock<HashMap<String, HashMap<usize, quinn::Connection>>>>,
-        service_map: &Arc<HashMap<String, String>>,
+        consumers: &Arc<RwLock<HashMap<String, HashMap<usize, ConsumerEntry>>>>,
+        service_map: &Arc<HashMap<String, ServiceInfo>>,
     ) {
         // 1. Create snapshots to minimize lock duration
         let (provider_snapshot, consumer_snapshot, provider_count, consumer_count) = {
@@ -329,7 +341,7 @@ impl Server {
             let consumer_snapshot: Vec<_> = consumers_lock
                 .iter()
                 .flat_map(|(uri, conns)| {
-                    conns.iter().map(move |(_id, conn)| (uri.clone(), conn.clone()))
+                    conns.iter().map(move |(_id, entry)| (uri.clone(), entry.connection.clone()))
                 })
                 .collect();
 
@@ -373,7 +385,7 @@ impl Server {
 
         for (uri, conn) in consumer_snapshot {
             let stats = conn.stats();
-            let service = service_map.get(&uri).map(|s| s.as_str()).unwrap_or("unknown");
+            let service = service_map.get(&uri).map(|s| s.name.as_str()).unwrap_or("unknown");
             info!(
                 type = "consumer",
                 service,
@@ -397,6 +409,8 @@ struct ConnectionContext {
     uri: String,
     endpoint_type: String,
     service: String,
+    service_urn: String,
+    stream_count: Arc<AtomicUsize>,
 }
 
 /// Represents the operational status of a provider.
@@ -413,6 +427,13 @@ enum ProviderStatus {
 struct ProviderEntry {
     connection: quinn::Connection,
     status: ProviderStatus,
+    stream_count: Arc<AtomicUsize>,
+}
+
+/// Stores the consumer's connection.
+#[derive(Clone)]
+struct ConsumerEntry {
+    connection: quinn::Connection,
 }
 
 /// Handles connections from clients with the "provider" role.
@@ -428,15 +449,18 @@ impl ProviderHandler {
         connection: quinn::Connection,
         cn: String,
         provider_connections: Arc<RwLock<HashMap<String, HashMap<String, ProviderEntry>>>>,
-        service_map: Arc<HashMap<String, String>>,
+        service_map: Arc<HashMap<String, ServiceInfo>>,
         _shared_config: Arc<ArcSwap<crate::config::AppConfig>>,
     ) -> Self {
         let now = Utc::now();
         let conn_id = connection.stable_id();
-        let service = service_map
+        let service_info = service_map
             .get(&cn)
             .cloned()
-            .unwrap_or_else(|| "unknown".to_string());
+            .unwrap_or_else(|| ServiceInfo {
+                name: "unknown".to_string(),
+                urn: "unknown".to_string(),
+            });
 
         // set idle timeout by availability management setting
         //let config = shared_config.load();
@@ -454,23 +478,26 @@ impl ProviderHandler {
         //    }
         //}
 
-        let endpoint_type = "Provider".to_string();
+        let endpoint_type = "serviceProvider".to_string();
         let context = ConnectionContext {
             connection: connection.clone(),
             start_at: now,
             connection_id: conn_id,
             uri: cn.clone(),
             endpoint_type: endpoint_type.clone(),
-            service: service.clone(),
+            service: service_info.name.clone(),
+            service_urn: service_info.urn.clone(),
+            stream_count: Arc::new(AtomicUsize::new(0)),
         };
         info!(
-            type = &context.endpoint_type,
-            uri = &context.uri,
-            service = &context.service,
-            id = context.connection_id,
+            eventType = "startSpnSession",
+            timestamp = %context.start_at,
+            spnSessionId = context.connection_id,
+            spnEndPoint = &context.uri,
+            endPointType = &context.endpoint_type,
+            serviceUrn = &context.service_urn,
             remote = %context.connection.remote_address(),
-            start_at = %context.start_at,
-            "QUIC Connection (spn session) established"
+            "SPN session (QUIC Connection) established"
         );
         Self {
             context,
@@ -525,6 +552,7 @@ impl ProviderHandler {
             let entry = ProviderEntry {
                 connection: self.context.connection.clone(),
                 status: ProviderStatus::Active,
+                stream_count: self.context.stream_count.clone(),
             };
             providers_by_service
                 .entry(self.context.service.clone())
@@ -571,15 +599,7 @@ impl ProviderHandler {
             );
         }
 
-        log_connection_close(
-            &self.context.endpoint_type,
-            &self.context.uri,
-            &self.context.service,
-            self.context.start_at,
-            self.context.connection_id,
-            &reason,
-            stats,
-        );
+        log_connection_close(&self.context, &reason, stats);
 
         Ok(())
     }
@@ -589,9 +609,9 @@ impl ProviderHandler {
 /// Consumers initiate bidirectional streams to request data from providers.
 struct ConsumerHandler {
     context: ConnectionContext,
-    target_provider: Option<quinn::Connection>,
+    target_provider: Option<(quinn::Connection, Arc<AtomicUsize>)>,
     provider_connections: Arc<RwLock<HashMap<String, HashMap<String, ProviderEntry>>>>,
-    consumer_connections: Arc<RwLock<HashMap<String, HashMap<usize, quinn::Connection>>>>,
+    consumer_connections: Arc<RwLock<HashMap<String, HashMap<usize, ConsumerEntry>>>>,
     /// Provider URN
     provider_urn: Option<String>,
     /// Availability management configuration for provider.
@@ -614,33 +634,39 @@ impl ConsumerHandler {
         connection: quinn::Connection,
         cn: String,
         provider_connections: Arc<RwLock<HashMap<String, HashMap<String, ProviderEntry>>>>,
-        consumer_connections: Arc<RwLock<HashMap<String, HashMap<usize, quinn::Connection>>>>,
-        service_map: Arc<HashMap<String, String>>,
+        consumer_connections: Arc<RwLock<HashMap<String, HashMap<usize, ConsumerEntry>>>>,
+        service_map: Arc<HashMap<String, ServiceInfo>>,
         shared_config: Arc<ArcSwap<crate::config::AppConfig>>,
     ) -> Self {
         let now = Utc::now();
         let conn_id = connection.stable_id();
-        let service = service_map
+        let service_info = service_map
             .get(&cn)
             .cloned()
-            .unwrap_or_else(|| "unknown".to_string());
-        let endpoint_type = "Consumer".to_string();
+            .unwrap_or_else(|| ServiceInfo {
+                name: "unknown".to_string(),
+                urn: "unknown".to_string(),
+            });
+        let endpoint_type = "serviceConsumer".to_string();
         let context = ConnectionContext {
             connection: connection.clone(),
             start_at: now,
             connection_id: conn_id,
             uri: cn.clone(),
             endpoint_type: endpoint_type.clone(),
-            service: service.clone(),
+            service: service_info.name.clone(),
+            service_urn: service_info.urn.clone(),
+            stream_count: Arc::new(AtomicUsize::new(0)),
         };
         info!(
-            type = &context.endpoint_type,
-            uri = &context.uri,
-            service = &context.service,
-            id = context.connection_id,
+            eventType = "startSpnSession",
+            timestamp = %context.start_at,
+            spnSessionId = context.connection_id,
+            spnEndPoint = &context.uri,
+            endPointType = &context.endpoint_type,
+            serviceUrn = &context.service_urn,
             remote = %context.connection.remote_address(),
-            start_at = %context.start_at,
-            "QUIC Connection (spn session) established"
+            "SPN session (QUIC Connection) established"
         );
 
         // Extract configuration needed for consumer handling
@@ -650,7 +676,7 @@ impl ConsumerHandler {
             .iter()
             .flat_map(|r| &r.hubs)
             .flat_map(|h| &h.services)
-            .find(|s| s.name == service);
+            .find(|s| s.name == context.service);
 
         let (provider_urn, availability_config) = match service_config {
             Some(s) => (
@@ -770,15 +796,15 @@ impl ConsumerHandler {
                             .iter()
                             .find(|(_, entry)| entry.status == ProviderStatus::Active)
                     })
-                    .map(|(cn, entry)| (cn.clone(), entry.connection.clone()))
+                    .map(|(cn, entry)| (cn.clone(), entry.connection.clone(), entry.stream_count.clone()))
             }; // --- Lock Scope End ---
 
-            if let Some((provider_cn, provider_conn)) = found_provider {
+            if let Some((provider_cn, provider_conn, provider_stream_count)) = found_provider {
                 info!(
                     "Found matching provider '{}' for service '{}'. Storing for later use.",
                     provider_cn, self.context.service
                 );
-                self.target_provider = Some(provider_conn);
+                self.target_provider = Some((provider_conn, provider_stream_count));
                 return; // Found it, exit the function.
             }
 
@@ -819,6 +845,7 @@ impl ConsumerHandler {
     async fn proxy_streams_with_provider(
         &mut self,
         provider_conn: quinn::Connection,
+        provider_stream_count: Arc<AtomicUsize>,
     ) -> ProxyLoopResult {
         /// Internal enum to distinguish between different kinds of stream proxy errors,
         /// allowing the loop to decide how to react.
@@ -872,9 +899,11 @@ impl ConsumerHandler {
                                 self.first_stream_accepted = true;
                             }
                             info!("Bidirectional stream accepted from consumer '{}'", self.context.uri);
+                            self.context.stream_count.fetch_add(1, Ordering::Relaxed);
                             let consumer_context = self.context.clone();
                             let tx_clone = error_tx.clone();
                             let provider_conn_clone = provider_conn.clone();
+                            let provider_stream_count_clone = provider_stream_count.clone();
                             tokio::spawn(async move {
                                 let stream_id = recv.id();
                                 let connection_id = consumer_context.connection_id;
@@ -883,6 +912,7 @@ impl ConsumerHandler {
                                     send,
                                     recv,
                                     provider_conn_clone,
+                                    provider_stream_count_clone,
                                     consumer_context,
                                 )
                                 .instrument(info_span!(
@@ -937,10 +967,11 @@ impl ConsumerHandler {
         // Add the connection to the shared map.
         {
             let mut consumers_by_uri = self.consumer_connections.write().await;
+            let entry = ConsumerEntry { connection: self.context.connection.clone() };
             consumers_by_uri
                 .entry(self.context.uri.clone())
                 .or_default()
-                .insert(self.context.connection_id, self.context.connection.clone());
+                .insert(self.context.connection_id, entry);
             let total_consumers: usize = consumers_by_uri.values().map(|v| v.len()).sum();
             info!(
                 "Consumer '{}' added to connection map. (Total: {})",
@@ -955,8 +986,8 @@ impl ConsumerHandler {
             self.find_and_set_target_provider(search_interval, search_timeout)
                 .await;
 
-            let provider_conn = match self.target_provider.clone() {
-                Some(conn) => conn,
+            let (provider_conn, provider_stream_count) = match self.target_provider.clone() {
+                Some(val) => val,
                 None => {
                     warn!(
                         "No active provider found for service '{}'. Closing connection.",
@@ -973,7 +1004,7 @@ impl ConsumerHandler {
             };
 
             // 2. Start proxying streams with the found provider.
-            match self.proxy_streams_with_provider(provider_conn).await {
+            match self.proxy_streams_with_provider(provider_conn, provider_stream_count).await {
                 ProxyLoopResult::ProviderError => {
                     // A recoverable provider error occurred, loop again to find a new one.
                     // Brief pause to avoid busy loop if the broken provider is not yet removed from the map.
@@ -1004,15 +1035,7 @@ impl ConsumerHandler {
         }
 
         let stats = self.context.connection.stats();
-        log_connection_close(
-            &self.context.endpoint_type,
-            &self.context.uri,
-            &self.context.service,
-            self.context.start_at,
-            self.context.connection_id,
-            &reason,
-            stats,
-        );
+        log_connection_close(&self.context, &reason, stats);
 
         Ok(())
     }
@@ -1024,9 +1047,11 @@ async fn proxy_consumer_stream_to_provider(
     mut consumer_send: quinn::SendStream,
     mut consumer_recv: quinn::RecvStream,
     provider_conn: quinn::Connection,
+    provider_stream_count: Arc<AtomicUsize>,
     consumer_context: ConnectionContext,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let start_at = Utc::now();
+
     //let stream_id = consumer_recv.id();
     // Consumer-side identifiers
     let consumer_connection_id = consumer_context.connection_id;
@@ -1035,19 +1060,17 @@ async fn proxy_consumer_stream_to_provider(
     // Provider-side identifiers
     let provider_connection_id = provider_conn.stable_id();
     let (mut provider_send, mut provider_recv) = provider_conn.open_bi().await?;
+    provider_stream_count.fetch_add(1, Ordering::Relaxed);
     let provider_stream_id = provider_send.id();
+    let spn_connection_id = format!("{}-{}", consumer_stream_id, provider_stream_id);
 
     info!(
-        message = "QUIC stream proxy (spn con) start",
-        start_at = %start_at,
-        consumer_connection_id,
-        consumer_stream_id = %consumer_stream_id,
-        provider_connection_id,
-        provider_stream_id = %provider_stream_id,
-        endpoint_type = &consumer_context.endpoint_type,
-        uri = &consumer_context.uri,
-        service = &consumer_context.service,
-        "Proxying stream"
+        eventType = "startSpnConnection",
+        timestamp = %start_at,
+        spnConnectionId = &spn_connection_id,
+        consumerSideSpnSessionId = consumer_connection_id,
+        providerSideSpnSessionId = provider_connection_id,
+        "SPN connection (QUIC srream) start"
     );
 
     // Proxy data in both directions concurrently.
@@ -1060,50 +1083,50 @@ async fn proxy_consumer_stream_to_provider(
     match result {
         Ok((bytes_c2p, bytes_p2c)) => {
             info!(
-                message = "QUIC stream proxy (spn con) finished",
-                start_at = %start_at,
-                duration_ms = duration.num_milliseconds(),
-                consumer_connection_id,
-                consumer_stream_id = %consumer_stream_id,
-                provider_connection_id,
-                provider_stream_id = %provider_stream_id,
-                endpoint_type = &consumer_context.endpoint_type,
-                uri = &consumer_context.uri,
-                service = &consumer_context.service,
-                total_sent_bytes = bytes_c2p,
-                total_receive_bytes = bytes_p2c,
+                eventType = "endSpnConnection",
+                timestamp = %Utc::now(),
+                spnConnectionId = &spn_connection_id,
+                consumerSideSpnSessionId = consumer_connection_id,
+                providerSideSpnSessionId = provider_connection_id,
+                totalSentBytes = bytes_c2p,
+                totalReceiveBytes = bytes_p2c,
+                elapsedTime = duration.num_milliseconds(),
+                disconnectReason = "closed",
+                "SPN connection (QUIC srream) finished"
             );
+            // The streams will be closed automatically when they are dropped.
+            Ok(())
         }
         Err(e) => {
             info!(
-                message = "QUIC stream proxy (spn con) finished with error",
-                start_at = %start_at,
-                duration_ms = duration.num_milliseconds(),
-                consumer_connection_id,
-                consumer_stream_id = %consumer_stream_id,
-                provider_connection_id,
-                provider_stream_id = %provider_stream_id,
-                endpoint_type = &consumer_context.endpoint_type,
-                uri = &consumer_context.uri,
-                service = &consumer_context.service,
-                error = %e,
-                "Stream proxying failed"
+                eventType = "endSpnConnection",
+                timestamp = %Utc::now(),
+                spnConnectionId = &spn_connection_id,
+                consumerSideSpnSessionId = consumer_connection_id,
+                providerSideSpnSessionId = provider_connection_id,
+                elapsedTime = duration.num_milliseconds(),
+                disconnectReason = "error",
+                error_details = %e,
+                "SPN connection (QUIC srream) finished with error"
             );
-            return Err(e.into());
+            Err(e.into())
         }
     }
+}
 
-    // The streams will be closed automatically when they are dropped.
-    Ok(())
+/// Maps a quinn::ConnectionError to a reason string defined in the spec.
+fn map_reason_to_string(reason: &quinn::ConnectionError) -> &str {
+    match reason {
+        quinn::ConnectionError::ApplicationClosed(_) => "terminatedByPeer",
+        quinn::ConnectionError::ConnectionClosed(_) => "terminatedByPeer",
+        quinn::ConnectionError::LocallyClosed => "shutdown",
+        _ => "error",
+    }
 }
 
 /// Logs the details of a connection closure.
 fn log_connection_close(
-    endpoint_type: &str,
-    uri: &str,
-    service: &str,
-    start_at: DateTime<Utc>,
-    connection_id: usize,
+    context: &ConnectionContext,
     reason: &quinn::ConnectionError,
     _stats: quinn::ConnectionStats,
 ) {
@@ -1112,8 +1135,8 @@ fn log_connection_close(
         quinn::ConnectionError::ApplicationClosed(app_close) => {
             info!(
                 "{} connection for '{}' closed by the application. Code: {}, Reason: '{}'",
-                endpoint_type,
-                uri,
+                context.endpoint_type,
+                context.uri,
                 app_close.error_code,
                 String::from_utf8_lossy(&app_close.reason)
             );
@@ -1121,45 +1144,49 @@ fn log_connection_close(
         quinn::ConnectionError::ConnectionClosed(conn_close) => {
             info!(
                 "{} connection for '{}' closed by the peer. Code: {}, Reason: '{}'",
-                endpoint_type,
-                uri,
+                context.endpoint_type,
+                context.uri,
                 conn_close.error_code,
                 String::from_utf8_lossy(&conn_close.reason)
             );
         }
         quinn::ConnectionError::TimedOut => {
-            warn!("{} connection for '{}' timed out.", endpoint_type, uri);
+            warn!("{} connection for '{}' timed out.", context.endpoint_type, context.uri);
         }
         quinn::ConnectionError::LocallyClosed => {
             info!(
                 "{} connection for '{}' was closed locally.",
-                endpoint_type, uri
+                context.endpoint_type, context.uri
             );
         }
         quinn::ConnectionError::TransportError(transport_error) => {
             error!(
                 "{} connection for '{}' failed due to a transport error. Code: {:?}, Reason: '{}'",
-                endpoint_type, uri, transport_error.code, transport_error.reason
+                context.endpoint_type, context.uri, transport_error.code, transport_error.reason
             );
         }
         other_error => {
             error!(
                 "{} connection for '{}' closed with an unexpected error: {:?}",
-                endpoint_type, uri, other_error
+                context.endpoint_type, context.uri, other_error
             );
         }
     }
 
-    let duration = Utc::now() - start_at;
-    let total_streams = -1; // AI USO stats.uni_streams + stats.bi_streams;
+    let duration = Utc::now() - context.start_at;
+    let total_connections = context.stream_count.load(Ordering::Relaxed);
+    let terminate_reason = map_reason_to_string(reason);
+
     info!(
-        type = endpoint_type,
-        uri = uri,
-        service = service,
-        id = connection_id,
-        duration_s = duration.num_seconds(),
-        reason = ?reason,
-        total_streams = total_streams,
-        "QUIC Connection (spn session) closed"
+        eventType = "endSpnSession",
+        timestamp = %Utc::now(),
+        spnSessionId = context.connection_id,
+        spnEndPoint = &context.uri,
+        endPointType = &context.endpoint_type,
+        serviceUrn = &context.service_urn,
+        totalConnectionCount = total_connections,
+        elapsedTime = duration.num_seconds(),
+        terminateReason = terminate_reason,
+        "SPN session (QUIC Connection) closed"
     );
 }
