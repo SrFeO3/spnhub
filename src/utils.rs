@@ -104,7 +104,7 @@ pub fn create_quic_server_endpoint(
         .max_concurrent_uni_streams(crate::MAX_CONCURRENT_UNI_STREAMS.into())
         .keep_alive_interval(Some(Duration::from_secs(crate::KEEP_ALIVE_INTERVAL_SECS)))
         .datagram_receive_buffer_size(Some(crate::DATAGRAM_RECEIVE_BUFFER_SIZE))
-        .max_idle_timeout(None);
+        .max_idle_timeout(Some(Duration::from_secs(crate::IDLE_TIMEOUT_SECS).try_into()?));
 
     let endpoint = quinn::Endpoint::server(quinn_server_config, server_addrs)?;
 

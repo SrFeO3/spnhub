@@ -30,7 +30,8 @@ mod utils;
 use crate::config::{ConfigHotReloadService, load_initial_config};
 
 const MAX_CONCURRENT_UNI_STREAMS: u8 = 0;
-const KEEP_ALIVE_INTERVAL_SECS: u64 = 50;
+const KEEP_ALIVE_INTERVAL_SECS: u64 = 5;
+const IDLE_TIMEOUT_SECS: u64 = 20;
 const DATAGRAM_RECEIVE_BUFFER_SIZE: usize = 1024 * 1024;
 
 /// Command-line arguments.
@@ -153,7 +154,7 @@ struct Server {
     endpoint: quinn::Endpoint,
     /// A map storing provider connections.
     /// Key: Service name -> Inner Key: Provider URI (CN) -> Value: QUIC connection.
-    provider_connections: Arc<RwLock<HashMap<String, HashMap<String, quinn::Connection>>>>,
+    provider_connections: Arc<RwLock<HashMap<String, HashMap<String, ProviderEntry>>>>,
     /// A map storing consumer connections.
     /// Key: Consumer URI (CN) -> Inner Key: Connection ID -> Value: QUIC connection.
     consumer_connections: Arc<RwLock<HashMap<String, HashMap<usize, quinn::Connection>>>>,
@@ -166,7 +167,7 @@ impl Server {
     /// Creates a new server instance.
     fn new(
         endpoint: quinn::Endpoint,
-        provider_connections: Arc<RwLock<HashMap<String, HashMap<String, quinn::Connection>>>>,
+        provider_connections: Arc<RwLock<HashMap<String, HashMap<String, ProviderEntry>>>>,
         consumer_connections: Arc<RwLock<HashMap<String, HashMap<usize, quinn::Connection>>>>,
         service_map: Arc<HashMap<String, String>>,
         shared_config: Arc<ArcSwap<crate::config::AppConfig>>,
@@ -304,7 +305,7 @@ impl Server {
 
     /// Reports server statistics.
     async fn report_stats(
-        providers: &Arc<RwLock<HashMap<String, HashMap<String, quinn::Connection>>>>,
+        providers: &Arc<RwLock<HashMap<String, HashMap<String, ProviderEntry>>>>,
         consumers: &Arc<RwLock<HashMap<String, HashMap<usize, quinn::Connection>>>>,
         service_map: &Arc<HashMap<String, String>>,
     ) {
@@ -319,7 +320,9 @@ impl Server {
             let provider_snapshot: Vec<_> = providers_lock
                 .iter()
                 .flat_map(|(service, map)| {
-                    map.iter().map(|(cn, conn)| (service.clone(), cn.clone(), conn.clone()))
+                    map.iter().map(|(cn, entry)| {
+                        (service.clone(), cn.clone(), entry.connection.clone(), entry.status.clone())
+                    })
                 })
                 .collect();
 
@@ -354,13 +357,14 @@ impl Server {
         );
 
         // 2. Log stats outside the lock
-        for (service, cn, conn) in provider_snapshot {
+        for (service, cn, conn, status) in provider_snapshot {
             let stats = conn.stats();
             info!(
                 type = "provider",
                 service,
                 cn,
                 id = conn.stable_id(),
+                status = ?status,
                 rtt_ms = stats.path.rtt.as_millis(),
                 lost_packets = stats.path.lost_packets,
                 " -Provider"
@@ -395,11 +399,27 @@ struct ConnectionContext {
     service: String,
 }
 
+/// Represents the operational status of a provider.
+#[derive(Clone, Debug, PartialEq)]
+enum ProviderStatus {
+    /// The provider is active and can accept new consumer streams.
+    Active,
+    /// The provider is shutting down and will not accept new consumer streams.
+    ShuttingDown,
+}
+
+/// Stores the provider's connection and its current status.
+#[derive(Clone)]
+struct ProviderEntry {
+    connection: quinn::Connection,
+    status: ProviderStatus,
+}
+
 /// Handles connections from clients with the "provider" role.
 /// Providers register themselves and wait for incoming requests (proxied streams).
 struct ProviderHandler {
     context: ConnectionContext,
-    provider_connections: Arc<RwLock<HashMap<String, HashMap<String, quinn::Connection>>>>,
+    provider_connections: Arc<RwLock<HashMap<String, HashMap<String, ProviderEntry>>>>,
 }
 
 impl ProviderHandler {
@@ -407,7 +427,7 @@ impl ProviderHandler {
     fn new(
         connection: quinn::Connection,
         cn: String,
-        provider_connections: Arc<RwLock<HashMap<String, HashMap<String, quinn::Connection>>>>,
+        provider_connections: Arc<RwLock<HashMap<String, HashMap<String, ProviderEntry>>>>,
         service_map: Arc<HashMap<String, String>>,
         _shared_config: Arc<ArcSwap<crate::config::AppConfig>>,
     ) -> Self {
@@ -465,6 +485,8 @@ impl ProviderHandler {
     fn spawn_control_datagram_handler(&self) {
         let datagram_conn = self.context.connection.clone();
         let provider_uri = self.context.uri.clone();
+        let service_name = self.context.service.clone();
+        let provider_connections = self.provider_connections.clone();
 
         tokio::spawn(async move {
             while let Ok(bytes) = datagram_conn.read_datagram().await {
@@ -473,7 +495,16 @@ impl ProviderHandler {
 
                 match message.trim() {
                     "notify_shutdown" => {
-                        info!("Provider '{}' notified graceful shutdown start.", provider_uri);
+                        info!("Provider '{}' notified graceful shutdown. Marking as ShuttingDown.", provider_uri);
+                        let mut providers_by_service = provider_connections.write().await;
+                        if let Some(providers_for_service) = providers_by_service.get_mut(&service_name) {
+                            if let Some(provider_entry) = providers_for_service.get_mut(&provider_uri) {
+                                provider_entry.status = ProviderStatus::ShuttingDown;
+                                info!("Provider '{}' status set to ShuttingDown. It will no longer accept new consumers.", provider_uri);
+                            }
+                        }
+                        // The provider client is expected to close the connection after its own grace period.
+                        // The connection.closed().await in the run() loop will handle the final cleanup.
                     }
                     _ => {
                         warn!("Unknown control message from provider '{}': {}", provider_uri, message);
@@ -491,10 +522,14 @@ impl ProviderHandler {
         // Add the connection to the shared map.
         {
             let mut providers_by_service = self.provider_connections.write().await;
+            let entry = ProviderEntry {
+                connection: self.context.connection.clone(),
+                status: ProviderStatus::Active,
+            };
             providers_by_service
                 .entry(self.context.service.clone())
                 .or_default()
-                .insert(self.context.uri.clone(), self.context.connection.clone());
+                .insert(self.context.uri.clone(), entry);
             let total_services = providers_by_service.len();
             let total_providers: usize = providers_by_service.values().map(|v| v.len()).sum();
             info!(
@@ -503,11 +538,12 @@ impl ProviderHandler {
             );
             info!("Current provider connections state:");
             for (service, providers) in providers_by_service.iter() {
-                for (cn, conn) in providers.iter() {
+                for (cn, entry) in providers.iter() {
                     info!(
                         service = service.as_str(),
                         provider_cn = cn.as_str(),
-                        connection_id = conn.stable_id()
+                        connection_id = entry.connection.stable_id(),
+                        status = ?entry.status
                     );
                 }
             }
@@ -516,6 +552,7 @@ impl ProviderHandler {
         // Wait for the connection to be closed for any reason. This is the main lifetime of the handler.
         let reason = self.context.connection.closed().await;
         let stats = self.context.connection.stats();
+
         // Remove the connection from the shared map upon disconnection.
         {
             let mut providers_by_service = self.provider_connections.write().await;
@@ -553,7 +590,7 @@ impl ProviderHandler {
 struct ConsumerHandler {
     context: ConnectionContext,
     target_provider: Option<quinn::Connection>,
-    provider_connections: Arc<RwLock<HashMap<String, HashMap<String, quinn::Connection>>>>,
+    provider_connections: Arc<RwLock<HashMap<String, HashMap<String, ProviderEntry>>>>,
     consumer_connections: Arc<RwLock<HashMap<String, HashMap<usize, quinn::Connection>>>>,
     /// Provider URN
     provider_urn: Option<String>,
@@ -576,7 +613,7 @@ impl ConsumerHandler {
     fn new(
         connection: quinn::Connection,
         cn: String,
-        provider_connections: Arc<RwLock<HashMap<String, HashMap<String, quinn::Connection>>>>,
+        provider_connections: Arc<RwLock<HashMap<String, HashMap<String, ProviderEntry>>>>,
         consumer_connections: Arc<RwLock<HashMap<String, HashMap<usize, quinn::Connection>>>>,
         service_map: Arc<HashMap<String, String>>,
         shared_config: Arc<ArcSwap<crate::config::AppConfig>>,
@@ -727,8 +764,13 @@ impl ConsumerHandler {
                 let providers_by_service = self.provider_connections.read().await;
                 providers_by_service
                     .get(&self.context.service)
-                    .and_then(|providers| providers.iter().next())
-                    .map(|(cn, conn)| (cn.clone(), conn.clone()))
+                    .and_then(|providers| {
+                        // Find the first *active* provider.
+                        providers
+                            .iter()
+                            .find(|(_, entry)| entry.status == ProviderStatus::Active)
+                    })
+                    .map(|(cn, entry)| (cn.clone(), entry.connection.clone()))
             }; // --- Lock Scope End ---
 
             if let Some((provider_cn, provider_conn)) = found_provider {
@@ -934,6 +976,8 @@ impl ConsumerHandler {
             match self.proxy_streams_with_provider(provider_conn).await {
                 ProxyLoopResult::ProviderError => {
                     // A recoverable provider error occurred, loop again to find a new one.
+                    // Brief pause to avoid busy loop if the broken provider is not yet removed from the map.
+                    time::sleep(Duration::from_millis(500)).await;
                     continue 'main_loop;
                 }
                 ProxyLoopResult::ConnectionClosed(e) => {
