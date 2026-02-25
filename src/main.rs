@@ -18,8 +18,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use arc_swap::ArcSwap;
 use chrono::{DateTime, Utc};
 use clap::Parser;
-use rustls::crypto::ring::default_provider;
 use tokio::signal::unix::{signal, SignalKind};
+use rustls::crypto::ring::default_provider;
 use tokio::sync::{mpsc, RwLock};
 use tokio::time::{self, Duration, Instant};
 use tracing::{Instrument, error, info, info_span, warn};
@@ -32,9 +32,12 @@ mod utils;
 use crate::config::{AppConfig, ConfigHotReloadService, HubConfig, RealmConfig, load_initial_config};
 
 const MAX_CONCURRENT_UNI_STREAMS: u8 = 0;
+const DATAGRAM_RECEIVE_BUFFER_SIZE: usize = 1024 * 1024;
+
 const KEEP_ALIVE_INTERVAL_SECS: u64 = 5;
 const IDLE_TIMEOUT_SECS: u64 = 20;
-const DATAGRAM_RECEIVE_BUFFER_SIZE: usize = 1024 * 1024;
+
+const GRACEFUL_SHUTDOWN_DRAIN_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Command-line arguments.
 #[derive(Parser)]
@@ -50,7 +53,7 @@ struct Args {
     config: String,
 }
 
-/// Service information looked up from the config.
+/// Holds service information looked up from the config.
 #[derive(Clone, Debug)]
 struct ServiceInfo {
     name: String,
@@ -59,9 +62,15 @@ struct ServiceInfo {
 
 type HubKey = (String, String); // (RealmName, HubName)
 
+#[derive(Clone, Copy, Debug)]
+enum ShutdownMode {
+    Graceful,
+    Immediate,
+}
+
 struct RunningHub {
     handle: tokio::task::JoinHandle<()>,
-    shutdown_tx: mpsc::Sender<()>,
+    shutdown_tx: mpsc::Sender<ShutdownMode>,
     config: HubConfig,
     realm_ca_cert: String,
     endpoint: quinn::Endpoint,
@@ -101,15 +110,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     info!("All hubs started. Waiting for connections...");
 
-    // Wait for Ctrl-C
     let mut sigusr1 = signal(SignalKind::user_defined1())?;
+    let mut sigterm = signal(SignalKind::terminate())?;
+
+    let shutdown_mode;
+
     loop {
         tokio::select! {
             _ = tokio::signal::ctrl_c() => {
-                info!("Ctrl-C received, shutting down...");
+                info!("Ctrl-C (SIGINT) received, shutting down immediately...");
+                shutdown_mode = ShutdownMode::Immediate;
+                break;
+            }
+            _ = sigterm.recv() => {
+                info!("SIGTERM received, shutting down gracefully...");
+                shutdown_mode = ShutdownMode::Graceful;
                 break;
             }
             _ = sigusr1.recv() => {
+                info!("SIGUSR1 received, reloading configuration...");
                 if let Some(new_config) = reload_service.check_and_reload().await {
                     reconcile_hubs(&new_config, &mut running_hubs, shared_config.clone()).await;
                 }
@@ -119,7 +138,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Wait for all servers to finish
     for (_, hub) in running_hubs {
-        let _ = hub.shutdown_tx.send(()).await;
+        let _ = hub.shutdown_tx.send(shutdown_mode).await;
         let _ = hub.handle.await;
     }
 
@@ -190,7 +209,7 @@ async fn reconcile_hubs(
     for k in to_stop {
         if let Some(hub) = running_hubs.remove(&k) {
             info!("Stopping hub: {} (Realm: {})", k.1, k.0);
-            let _ = hub.shutdown_tx.send(()).await;
+            let _ = hub.shutdown_tx.send(ShutdownMode::Graceful).await;
             let _ = hub.handle.await; // Wait for release port
             info!("Hub stopped: {} (Realm: {})", k.1, k.0);
         }
@@ -287,11 +306,12 @@ struct Server {
     /// The QUIC endpoint bound to the server socket.
     endpoint: quinn::Endpoint,
     /// A map storing provider connections.
-    /// Key: Service name -> Inner Key: Provider URI (CN) -> Value: QUIC connection.
-    provider_connections: Arc<RwLock<HashMap<String, HashMap<String, ProviderEntry>>>>,
+    /// Key: Service name -> Inner Key: Connection ID -> Value: Provider Entry.
+    provider_connections: Arc<RwLock<HashMap<String, HashMap<usize, ProviderEntry>>>>,
     /// A map storing consumer connections.
     /// Key: Consumer URI (CN) -> Inner Key: Connection ID -> Value: QUIC connection.
     consumer_connections: Arc<RwLock<HashMap<String, HashMap<usize, ConsumerEntry>>>>,
+    /// A map for looking up the service name associated with a given endpoint URI (CN).
     service_map: Arc<HashMap<String, ServiceInfo>>,
     /// Shared application configuration, used for features like on-demand start.
     shared_config: Arc<ArcSwap<crate::config::AppConfig>>,
@@ -303,7 +323,7 @@ impl Server {
         realm_name: String,
         hub_name: String,
         endpoint: quinn::Endpoint,
-        provider_connections: Arc<RwLock<HashMap<String, HashMap<String, ProviderEntry>>>>,
+        provider_connections: Arc<RwLock<HashMap<String, HashMap<usize, ProviderEntry>>>>,
         consumer_connections: Arc<RwLock<HashMap<String, HashMap<usize, ConsumerEntry>>>>,
         service_map: Arc<HashMap<String, ServiceInfo>>,
         shared_config: Arc<ArcSwap<crate::config::AppConfig>>,
@@ -321,7 +341,7 @@ impl Server {
     }
 
     /// Runs the main server loop to accept connections.
-    async fn run(&self, mut shutdown_rx: mpsc::Receiver<()>) {
+    async fn run(&self, mut shutdown_rx: mpsc::Receiver<ShutdownMode>) {
         info!("Server (Realm: {}, Hub: {}) is ready to accept connections.", self.realm_name, self.hub_name);
 
         let mut stats_interval = time::interval(Duration::from_secs(10));
@@ -424,8 +444,59 @@ impl Server {
                         }
                     });
                 }
-                _ = shutdown_rx.recv() => {
-                    info!("Shutdown signal received, starting graceful shutdown.");
+                mode = shutdown_rx.recv() => {
+                    let mode = mode.unwrap_or(ShutdownMode::Immediate);
+                    match mode {
+                        ShutdownMode::Graceful => {
+                            info!("Shutdown signal received (Graceful), starting graceful shutdown.");
+
+                            // Send notify_shutdown to all providers
+                            {
+                                let providers = self.provider_connections.read().await;
+                                for (service_name, provider_map) in providers.iter() {
+                            for entry in provider_map.values() {
+                                info!("Sending notify_shutdown to provider: {} ({})", entry.uri, service_name);
+                                        let _ = entry.connection.send_datagram(b"notify_shutdown".to_vec().into());
+                                    }
+                                }
+                            }
+
+                            // Send notify_shutdown to all consumers
+                            {
+                                let consumers = self.consumer_connections.read().await;
+                                for (uri, consumer_map) in consumers.iter() {
+                                    for (id, entry) in consumer_map.iter() {
+                                        info!("Sending notify_shutdown to consumer: {} (ID: {})", uri, id);
+                                        let _ = entry.connection.send_datagram(b"notify_shutdown".to_vec().into());
+                                    }
+                                }
+                            }
+
+                            // Wait for connections to drain
+                            let timeout = GRACEFUL_SHUTDOWN_DRAIN_TIMEOUT;
+                            let start = Instant::now();
+                            info!("Waiting for connections to drain (timeout: {:?})", timeout);
+
+                            loop {
+                                if start.elapsed() >= timeout {
+                                    warn!("Graceful shutdown timeout reached. Forcing close.");
+                                    break;
+                                }
+
+                                let p_count = self.provider_connections.read().await.values().map(|m| m.len()).sum::<usize>();
+                                let c_count = self.consumer_connections.read().await.values().map(|m| m.len()).sum::<usize>();
+
+                                if p_count == 0 && c_count == 0 {
+                                    info!("All connections drained.");
+                                    break;
+                                }
+                                time::sleep(Duration::from_millis(500)).await;
+                            }
+                        }
+                        ShutdownMode::Immediate => {
+                            info!("Shutdown signal received (Immediate), shutting down.");
+                        }
+                    }
                     break;
                 }
             }
@@ -443,7 +514,7 @@ impl Server {
     async fn report_stats(
         realm_name: &str,
         hub_name: &str,
-        providers: &Arc<RwLock<HashMap<String, HashMap<String, ProviderEntry>>>>,
+        providers: &Arc<RwLock<HashMap<String, HashMap<usize, ProviderEntry>>>>,
         consumers: &Arc<RwLock<HashMap<String, HashMap<usize, ConsumerEntry>>>>,
         service_map: &Arc<HashMap<String, ServiceInfo>>,
     ) {
@@ -458,8 +529,8 @@ impl Server {
             let provider_snapshot: Vec<_> = providers_lock
                 .iter()
                 .flat_map(|(service, map)| {
-                    map.iter().map(|(cn, entry)| {
-                        (service.clone(), cn.clone(), entry.connection.clone(), entry.status.clone())
+                    map.values().map(|entry| {
+                        (service.clone(), entry.uri.clone(), entry.connection.clone(), entry.status.clone())
                     })
                 })
                 .collect();
@@ -552,6 +623,8 @@ enum ProviderStatus {
     Active,
     /// The provider is shutting down and will not accept new consumer streams.
     ShuttingDown,
+    /// The provider is waiting for the active provider to disconnect.
+    StandBy,
 }
 
 /// Stores the provider's connection and its current status.
@@ -560,6 +633,8 @@ struct ProviderEntry {
     connection: quinn::Connection,
     status: ProviderStatus,
     stream_count: Arc<AtomicUsize>,
+    uri: String,
+    created_at: DateTime<Utc>,
 }
 
 /// Stores the consumer's connection.
@@ -572,7 +647,7 @@ struct ConsumerEntry {
 /// Providers register themselves and wait for incoming requests (proxied streams).
 struct ProviderHandler {
     context: ConnectionContext,
-    provider_connections: Arc<RwLock<HashMap<String, HashMap<String, ProviderEntry>>>>,
+    provider_connections: Arc<RwLock<HashMap<String, HashMap<usize, ProviderEntry>>>>,
 }
 
 impl ProviderHandler {
@@ -580,7 +655,7 @@ impl ProviderHandler {
     fn new(
         connection: quinn::Connection,
         cn: String,
-        provider_connections: Arc<RwLock<HashMap<String, HashMap<String, ProviderEntry>>>>,
+        provider_connections: Arc<RwLock<HashMap<String, HashMap<usize, ProviderEntry>>>>,
         service_map: Arc<HashMap<String, ServiceInfo>>,
         _shared_config: Arc<ArcSwap<crate::config::AppConfig>>,
     ) -> Self {
@@ -644,6 +719,7 @@ impl ProviderHandler {
     fn spawn_control_datagram_handler(&self) {
         let datagram_conn = self.context.connection.clone();
         let provider_uri = self.context.uri.clone();
+        let connection_id = self.context.connection_id;
         let service_name = self.context.service.clone();
         let provider_connections = self.provider_connections.clone();
 
@@ -657,7 +733,7 @@ impl ProviderHandler {
                         info!("Provider '{}' notified graceful shutdown. Marking as ShuttingDown.", provider_uri);
                         let mut providers_by_service = provider_connections.write().await;
                         if let Some(providers_for_service) = providers_by_service.get_mut(&service_name) {
-                            if let Some(provider_entry) = providers_for_service.get_mut(&provider_uri) {
+                            if let Some(provider_entry) = providers_for_service.get_mut(&connection_id) {
                                 provider_entry.status = ProviderStatus::ShuttingDown;
                                 info!("Provider '{}' status set to ShuttingDown. It will no longer accept new consumers.", provider_uri);
                             }
@@ -678,31 +754,39 @@ impl ProviderHandler {
         // Start a background task to listen for control datagrams
         self.spawn_control_datagram_handler();
 
-        // Add the connection to the shared map.
+        // Register the connection.
         {
             let mut providers_by_service = self.provider_connections.write().await;
+            let service_map = providers_by_service
+                .entry(self.context.service.clone())
+                .or_default();
+
+            // Check if there is ANY Active provider for this service
+            let has_active = service_map.values().any(|v| v.status == ProviderStatus::Active);
+            let status = if has_active { ProviderStatus::StandBy } else { ProviderStatus::Active };
+
             let entry = ProviderEntry {
                 connection: self.context.connection.clone(),
-                status: ProviderStatus::Active,
+                status: status.clone(),
                 stream_count: self.context.stream_count.clone(),
+                uri: self.context.uri.clone(),
+                created_at: self.context.start_at,
             };
-            providers_by_service
-                .entry(self.context.service.clone())
-                .or_default()
-                .insert(self.context.uri.clone(), entry);
+            service_map.insert(self.context.connection_id, entry);
+
             let total_services = providers_by_service.len();
             let total_providers: usize = providers_by_service.values().map(|v| v.len()).sum();
             info!(
-                "Provider '{}' added to connection map. (Total services: {}, Total providers: {})",
-                self.context.uri, total_services, total_providers
+                "Provider '{}' registered as {:?}. (Total services: {}, Total providers: {})",
+                self.context.uri, status, total_services, total_providers
             );
             info!("Current provider connections state:");
             for (service, providers) in providers_by_service.iter() {
-                for (cn, entry) in providers.iter() {
+                for (conn_id, entry) in providers.iter() {
                     info!(
                         service = service.as_str(),
-                        provider_cn = cn.as_str(),
-                        connection_id = entry.connection.stable_id(),
+                        provider_cn = entry.uri.as_str(),
+                        connection_id = conn_id,
                         status = ?entry.status
                     );
                 }
@@ -718,17 +802,17 @@ impl ProviderHandler {
             let mut providers_by_service = self.provider_connections.write().await;
             if let Some(providers_for_service) = providers_by_service.get_mut(&self.context.service)
             {
-                providers_for_service.remove(&self.context.uri);
-                // If this was the last provider for the service, remove the service entry itself.
-                if providers_for_service.is_empty() {
-                    providers_by_service.remove(&self.context.service);
+                if providers_for_service.remove(&self.context.connection_id).is_some() {
+                    if providers_for_service.is_empty() {
+                        providers_by_service.remove(&self.context.service);
+                    }
+                    let total_providers: usize = providers_by_service.values().map(|v| v.len()).sum();
+                    info!(
+                        "Provider '{}' removed from connection map. (Total providers remaining: {})",
+                        self.context.uri, total_providers
+                    );
                 }
             }
-            let total_providers: usize = providers_by_service.values().map(|v| v.len()).sum();
-            info!(
-                "Provider '{}' removed from connection map. (Total providers remaining: {})",
-                self.context.uri, total_providers
-            );
         }
 
         log_connection_close(&self.context, &reason, stats);
@@ -742,7 +826,7 @@ impl ProviderHandler {
 struct ConsumerHandler {
     context: ConnectionContext,
     target_provider: Option<(quinn::Connection, Arc<AtomicUsize>)>,
-    provider_connections: Arc<RwLock<HashMap<String, HashMap<String, ProviderEntry>>>>,
+    provider_connections: Arc<RwLock<HashMap<String, HashMap<usize, ProviderEntry>>>>,
     consumer_connections: Arc<RwLock<HashMap<String, HashMap<usize, ConsumerEntry>>>>,
     /// Provider URN
     provider_urn: Option<String>,
@@ -765,7 +849,7 @@ impl ConsumerHandler {
     fn new(
         connection: quinn::Connection,
         cn: String,
-        provider_connections: Arc<RwLock<HashMap<String, HashMap<String, ProviderEntry>>>>,
+        provider_connections: Arc<RwLock<HashMap<String, HashMap<usize, ProviderEntry>>>>,
         consumer_connections: Arc<RwLock<HashMap<String, HashMap<usize, ConsumerEntry>>>>,
         service_map: Arc<HashMap<String, ServiceInfo>>,
         shared_config: Arc<ArcSwap<crate::config::AppConfig>>,
@@ -917,27 +1001,50 @@ impl ConsumerHandler {
         let mut start_attempted = false;
 
         loop {
-            // --- Lock Scope Start ---
-            let found_provider = {
-                let providers_by_service = self.provider_connections.read().await;
-                providers_by_service
-                    .get(&self.context.service)
-                    .and_then(|providers| {
-                        // Find the first *active* provider.
-                        providers
-                            .iter()
-                            .find(|(_, entry)| entry.status == ProviderStatus::Active)
-                    })
-                    .map(|(cn, entry)| (cn.clone(), entry.connection.clone(), entry.stream_count.clone()))
-            }; // --- Lock Scope End ---
+            // 1. Try to find an Active provider (Read Lock)
+            let found_active = {
+                let providers = self.provider_connections.read().await;
+                providers.get(&self.context.service)
+                    .and_then(|map| map.values().find(|e| e.status == ProviderStatus::Active))
+                    .map(|e| (e.uri.clone(), e.connection.clone(), e.stream_count.clone()))
+            };
 
-            if let Some((provider_cn, provider_conn, provider_stream_count)) = found_provider {
-                info!(
-                    "Found matching provider '{}' for service '{}'. Storing for later use.",
-                    provider_cn, self.context.service
-                );
-                self.target_provider = Some((provider_conn, provider_stream_count));
-                return; // Found it, exit the function.
+            if let Some((cn, conn, count)) = found_active {
+                info!("Found matching provider '{}' for service '{}'.", cn, self.context.service);
+                self.target_provider = Some((conn, count));
+                return;
+            }
+
+            // 2. If no Active found, try to promote a StandBy provider (Write Lock)
+            let promoted = {
+                let mut providers = self.provider_connections.write().await;
+                let service_map = providers.entry(self.context.service.clone()).or_default();
+
+                // Double check Active (race condition)
+                if let Some(active) = service_map.values().find(|e| e.status == ProviderStatus::Active) {
+                     Some((active.uri.clone(), active.connection.clone(), active.stream_count.clone()))
+                } else {
+                    // Find a StandBy provider to promote
+                    let standby_key = service_map.iter()
+                        .filter(|(_, e)| e.status == ProviderStatus::StandBy)
+                        .min_by_key(|(_, e)| e.created_at)
+                        .map(|(k, _)| *k);
+
+                    if let Some(key) = standby_key {
+                        if let Some(entry) = service_map.get_mut(&key) {
+                            entry.status = ProviderStatus::Active;
+                            info!("Promoted provider '{}' to Active for service '{}'", entry.uri, self.context.service);
+                            Some((entry.uri.clone(), entry.connection.clone(), entry.stream_count.clone()))
+                        } else { None }
+                    } else {
+                        None
+                    }
+                }
+            };
+
+            if let Some((_, conn, count)) = promoted {
+                self.target_provider = Some((conn, count));
+                return;
             }
 
             // Attempt on-demand provider start on first consumer connected
@@ -1182,8 +1289,6 @@ async fn proxy_consumer_stream_to_provider(
     provider_stream_count: Arc<AtomicUsize>,
     consumer_context: ConnectionContext,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let start_at = Utc::now();
-
     //let stream_id = consumer_recv.id();
     // Consumer-side identifiers
     let consumer_connection_id = consumer_context.connection_id;
@@ -1195,6 +1300,7 @@ async fn proxy_consumer_stream_to_provider(
     provider_stream_count.fetch_add(1, Ordering::Relaxed);
     let provider_stream_id = provider_send.id();
     let spn_connection_id = format!("{}-{}", consumer_stream_id, provider_stream_id);
+    let start_at = Utc::now();
 
     info!(
         eventType = "startSpnConnection",
@@ -1202,12 +1308,20 @@ async fn proxy_consumer_stream_to_provider(
         spnConnectionId = &spn_connection_id,
         consumerSideSpnSessionId = consumer_connection_id,
         providerSideSpnSessionId = provider_connection_id,
-        "SPN connection (QUIC srream) start"
+        "SPN connection start"
     );
 
     // Proxy data in both directions concurrently.
-    let consumer_to_provider = tokio::io::copy(&mut consumer_recv, &mut provider_send);
-    let provider_to_consumer = tokio::io::copy(&mut provider_recv, &mut consumer_send);
+    let consumer_to_provider = async {
+        tokio::io::copy(&mut consumer_recv, &mut provider_send)
+            .await
+            .map_err(|e| (e, "Consumer->Provider"))
+    };
+    let provider_to_consumer = async {
+        tokio::io::copy(&mut provider_recv, &mut consumer_send)
+            .await
+            .map_err(|e| (e, "Provider->Consumer"))
+    };
 
     let result = tokio::try_join!(consumer_to_provider, provider_to_consumer);
     let duration = Utc::now() - start_at;
@@ -1229,7 +1343,7 @@ async fn proxy_consumer_stream_to_provider(
             // The streams will be closed automatically when they are dropped.
             Ok(())
         }
-        Err(e) => {
+        Err((e, direction)) => { // This is (std::io::Error, &str)
             info!(
                 eventType = "endSpnConnection",
                 timestamp = %Utc::now(),
@@ -1238,8 +1352,9 @@ async fn proxy_consumer_stream_to_provider(
                 providerSideSpnSessionId = provider_connection_id,
                 elapsedTime = duration.num_milliseconds(),
                 disconnectReason = "error",
+                error_direction = direction,
                 error_details = %e,
-                "SPN connection (QUIC srream) finished with error"
+                "SPN connection (QUIC srream) finished"
             );
             Err(e.into())
         }
