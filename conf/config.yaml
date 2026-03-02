@@ -106,6 +106,7 @@ realms:
                   fqdn: sirius.test.example.com
       virtualHosts:
           - name: "www"
+            title: "www"
             depriciated-hostname: "www.test.example.com"
             description: Virtual host configuration for the shop website.
             subdomain: "urn:chip-in:subdomain:forge:test.example.com:www"
@@ -162,6 +163,7 @@ realms:
                 Zy3FId4yivtajMUu865euw==
                 -----END PRIVATE KEY-----
           - name: "auth"
+            title: "auth"
             depriciated-hostname: "auth.test.example.com"
             description: Virtual host configuration for the auth website.
             subdomain: "urn:chip-in:subdomain:forge:test.example.com:auth"
@@ -218,6 +220,7 @@ realms:
                 +pIGSqXKXQUqM0rZoMUGQw==
                 -----END PRIVATE KEY-----
           - name: "api"
+            title: "api"
             depriciated-hostname: "api.test.example.com"
             description: Virtual host configuration for the api server.
             subdomain: "urn:chip-in:subdomain:forge:test.example.com:api"
@@ -274,6 +277,7 @@ realms:
                 t8lPOJeNU9q7aZP8lFgBCQ4=
                 -----END PRIVATE KEY-----
           - name: "check"
+            title: "check"
             depriciated-hostname: "check.test.example.com"
             description: Virtual host configuration for the check website.
             subdomain: "urn:chip-in:subdomain:forge:test.example.com:check"
@@ -330,6 +334,7 @@ realms:
                 k5hW7T6/cuPDd3NGAt0qFcWP
                 -----END PRIVATE KEY-----
           - name: "sirius"
+            title: "sirius"
             depriciated-hostname: "sirius.test.example.com"
             description: Virtual host configuration for the sirius website.
             subdomain: "urn:chip-in:subdomain:forge:test.example.com:sirius"
@@ -689,6 +694,7 @@ realms:
                   fqdn: sirius.sr.example.com
       virtualHosts:
           - name: "sirius"
+            title: "sirius"
             depriciated-hostname: "sirius.sr.example.com"
             description: Virtual host configuration for the main shop website.
             subdomain: "urn:chip-in:subdomain:development:sr.example.com:sirius"
