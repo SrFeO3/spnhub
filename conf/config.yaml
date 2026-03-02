@@ -107,7 +107,6 @@ realms:
       virtualHosts:
           - name: "www"
             title: "www"
-            depriciated-hostname: "www.test.example.com"
             description: Virtual host configuration for the shop website.
             subdomain: "urn:chip-in:subdomain:forge:test.example.com:www"
             certificate: |
@@ -164,7 +163,6 @@ realms:
                 -----END PRIVATE KEY-----
           - name: "auth"
             title: "auth"
-            depriciated-hostname: "auth.test.example.com"
             description: Virtual host configuration for the auth website.
             subdomain: "urn:chip-in:subdomain:forge:test.example.com:auth"
             certificate: |
@@ -221,7 +219,6 @@ realms:
                 -----END PRIVATE KEY-----
           - name: "api"
             title: "api"
-            depriciated-hostname: "api.test.example.com"
             description: Virtual host configuration for the api server.
             subdomain: "urn:chip-in:subdomain:forge:test.example.com:api"
             certificate: |
@@ -278,7 +275,6 @@ realms:
                 -----END PRIVATE KEY-----
           - name: "check"
             title: "check"
-            depriciated-hostname: "check.test.example.com"
             description: Virtual host configuration for the check website.
             subdomain: "urn:chip-in:subdomain:forge:test.example.com:check"
             certificate: |
@@ -335,7 +331,6 @@ realms:
                 -----END PRIVATE KEY-----
           - name: "sirius"
             title: "sirius"
-            depriciated-hostname: "sirius.test.example.com"
             description: Virtual host configuration for the sirius website.
             subdomain: "urn:chip-in:subdomain:forge:test.example.com:sirius"
             certificate: |
@@ -695,7 +690,6 @@ realms:
       virtualHosts:
           - name: "sirius"
             title: "sirius"
-            depriciated-hostname: "sirius.sr.example.com"
             description: Virtual host configuration for the main shop website.
             subdomain: "urn:chip-in:subdomain:development:sr.example.com:sirius"
             accessLogMaxValueLength: 512
