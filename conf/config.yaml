@@ -442,6 +442,7 @@ realms:
                       authScopeName: "shop_scope"
                       protectedUpstream: "http://127.0.0.1:9000"
                       oidcClientId: "fruit-shop"
+                      oidcClientSecret: "fruit-shop-secret"
                       oidcRedirectUrl: "https://www.test.example.com:8000/shop/"
                       oidcAuthorizationEndpoint: "https://auth.test.example.com:8000/authorize"
                       oidcTokenEndpoint: "http://127.0.0.1:9001/api/token"
