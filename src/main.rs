@@ -177,24 +177,22 @@ async fn reconcile_hubs(
                        running_hub.config.server_cert_key != new_hub.server_cert_key ||
                        running_hub.realm_ca_cert != new_realm.realm_ca_cert {
                         info!("Certificate changed for hub: {}. Reloading certificates...", hub_name);
-                        match utils::load_certs_and_key_from_strings(&new_hub.server_cert, &new_hub.server_cert_key, &new_realm.realm_ca_cert) {
-                            Ok((certs, key, truststore)) => {
-                                match utils::create_server_config(certs, key, truststore, &[b"sc01-provider", b"sc01-consumer"]) {
-                                    Ok(server_config) => {
-                                        running_hub.endpoint.set_server_config(Some(server_config));
-                                        info!("Certificates reloaded for hub: {}", hub_name);
-                                    }
-                                    Err(e) => {
-                                        error!("Failed to create server config for hub {}: {}", hub_name, e);
-                                        continue;
-                                    }
-                                }
-                            }
-                            Err(e) => {
-                                error!("Failed to load certificates for hub {}: {}", hub_name, e);
-                                continue;
-                            }
+                        let reload_result = || -> Result<(), Box<dyn std::error::Error>> {
+                            let (certs, key, truststore) = utils::load_certs_and_key_from_strings(
+                                &new_hub.server_cert,
+                                &new_hub.server_cert_key,
+                                &new_realm.realm_ca_cert,
+                            )?;
+                            let server_config = utils::create_server_config(certs, key, truststore, &[b"sc01-provider", b"sc01-consumer"])?;
+                            running_hub.endpoint.set_server_config(Some(server_config));
+                            Ok(())
+                        };
+
+                        if let Err(e) = reload_result() {
+                            error!("Failed to reload certificates for hub {}: {}", hub_name, e);
+                            continue;
                         }
+                        info!("Certificates reloaded for hub: {}", hub_name);
                     }
 
                     // Update stored config state
@@ -1344,6 +1342,11 @@ async fn proxy_consumer_stream_to_provider(
             Ok(())
         }
         Err((e, direction)) => { // This is (std::io::Error, &str)
+            let reason = match e.kind() {
+                std::io::ErrorKind::ConnectionReset | std::io::ErrorKind::BrokenPipe => "closedByPeer",
+                _ => "error",
+            };
+
             info!(
                 eventType = "endSpnConnection",
                 timestamp = %Utc::now(),
@@ -1351,7 +1354,7 @@ async fn proxy_consumer_stream_to_provider(
                 consumerSideSpnSessionId = consumer_connection_id,
                 providerSideSpnSessionId = provider_connection_id,
                 elapsedTime = duration.num_milliseconds(),
-                disconnectReason = "error",
+                disconnectReason = reason,
                 error_direction = direction,
                 error_details = %e,
                 "SPN connection (QUIC srream) finished"

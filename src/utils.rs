@@ -64,8 +64,8 @@ pub fn load_certs_and_key_from_strings(
 ///
 /// # Arguments
 ///
-/// * `sc_server_address`: The IP address for the server to listen on.
-/// * `sc_server_port`: The port for the server to listen on.
+/// * `server_address`: The IP address for the server to listen on.
+/// * `server_port`: The port for the server to listen on.
 /// * `certs`: A vector of `CertificateDer` representing the server's certificate chain.
 /// * `key`: The server's private key as a `PrivateKeyDer`.
 /// * `truststore`: A `RootCertStore` containing trusted CA certificates for client verification.
@@ -103,8 +103,8 @@ pub fn create_server_config(
 }
 
 pub fn create_quic_server_endpoint(
-    sc_server_address: &String,
-    sc_server_port: u16,
+    server_address: &String,
+    server_port: u16,
     certs: Vec<CertificateDer<'static>>,
     key: PrivateKeyDer<'static>,
     truststore: quinn::rustls::RootCertStore,
@@ -112,7 +112,7 @@ pub fn create_quic_server_endpoint(
 ) -> Result<quinn::Endpoint, Box<dyn Error>> {
     let quinn_server_config = create_server_config(certs, key, truststore, alpn_protocols)?;
 
-    let server_addrs = (sc_server_address.to_string(), sc_server_port)
+    let server_addrs = (server_address.to_string(), server_port)
         .to_socket_addrs()?
         .next()
         .unwrap();

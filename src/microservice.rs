@@ -4,8 +4,8 @@
 //!
 //! It handles:
 //! - Spawning (starting) services.
-//! - Monitoring health (watching).
-//! - Stopping (graceful/forced shutdown).
+//! - (Planned) Monitoring health (watching).
+//! - (Planned) Stopping (graceful/forced shutdown).
 //!
 //! ## Runtime Assumptions
 //! - Currently targets **Docker** as the container runtime.
@@ -214,24 +214,22 @@ async fn start_container(
     };
 
     // 4. Start
-    if let Err(e) = docker
+    match docker
         .start_container(&container_name, None::<StartContainerOptions>)
         .await
     {
-        // 304 Not Modified: Container already started.
-        if !matches!(
-            e,
-            Error::DockerResponseServerError {
-                status_code: 304,
-                ..
-            }
-        ) {
+        Ok(_) => {
+            tracing::info!("Container {} started successfully.", container_name);
+        }
+        Err(Error::DockerResponseServerError { status_code: 304, .. }) => {
+            // 304 Not Modified: Container already started. This is not an error for our use case.
+            tracing::info!("Container {} is already started.", container_name);
+        }
+        Err(e) => {
+            // Any other error is fatal.
             tracing::error!("Failed to start container {}: {}", container_name, e);
             return Err(e.into());
         }
-        tracing::info!("Container {} is already started.", container_name);
-    } else {
-        tracing::info!("Container {} started successfully.", container_name);
     }
 
     Ok(ContainerHandle { id })

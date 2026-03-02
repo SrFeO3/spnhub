@@ -27,74 +27,6 @@
 //!   It adds new scopes and removes obsolete ones, but crucially, it does **not** touch
 //!   existing, unchanged scopes. This ensures that active user sessions within those
 //!   scopes are preserved across configuration reloads.
-//!
-//! ## Usage Examples
-//!
-//! ### 1. Starting the Hot-Reload Service
-//!
-//! In your `main.rs`, initialize the configuration and start the monitoring service:
-//!
-//! ```rust,no_run
-//! use std::sync::Arc;
-//! use arc_swap::ArcSwap;
-//! // Assuming this module is accessible as `crate::config`
-//! use crate::config::{load_initial_config, ConfigHotReloadService};
-//!
-//! #[tokio::main]
-//! async fn main() {
-//!     let config_path = "config.yaml".to_string();
-//!
-//!     // Load initial config
-//!     let (initial_config, initial_content) = load_initial_config(&config_path).expect("Failed to load configuration");
-//!
-//!     // Create shared storage (ArcSwap allows lock-free reads)
-//!     let reload_service = ConfigHotReloadService::new(config_path.clone(), shared_config.clone(), initial_content);
-//!
-//!     // Start hot-reload service in a background task
-//!     let reload_service = ConfigHotReloadService::new(config_path.clone(), shared_config.clone());
-//!     tokio::spawn(async move {
-//!         reload_service.start().await;
-//!     });
-//!
-//!     // Pass `shared_config` to your server or components...
-//! }
-//! ```
-//!
-//! ### 2. Accessing Configuration Values
-//!
-//! Use `load()` to get a consistent snapshot of the configuration.
-//!
-//! ```rust,no_run
-//! use std::sync::Arc;
-//! use arc_swap::ArcSwap;
-//! use crate::config::AppConfig;
-//!
-//! fn handle_request(shared_config: &Arc<ArcSwap<AppConfig>>) {
-//!     // Get a snapshot (Guard) - this is cheap and lock-free
-//!     let config = shared_config.load();
-//!
-//!     // Access fields directly
-//!     for realm in &config.realms {
-//!         println!("Hub Name: {}", realm.hub.name);
-//!         println!("Server Port: {}", realm.hub.server_port);
-//!
-//!         // Access nested fields (e.g., services)
-//!         for service in &realm.hub.services {
-//!             println!("Service: {}, Image: {}", service.name, service.availability_management.image);
-//!         }
-//!     }
-//!
-//!     // Generate the service map from the config
-//!     let service_map = crate::config::generate_service_map(&config);
-//!     if let Some(service_name) = service_map.get("urn:chip-in:end-point:hub.master.TEST1ZONE:www-gateway") {
-//!         println!("Service for URN is: {}", service_name);
-//!     }
-//! }
-//! ```
-//!
-//! ### 3. Specifying the Configuration File
-//!
-//! The file path is passed to `load_initial_config` and `ConfigHotReloadService::new`.
 
 use std::collections::HashMap;
 use std::fs;
@@ -188,42 +120,39 @@ impl ConfigHotReloadService {
     }
 
     pub async fn check_and_reload(&self) -> Option<AppConfig> {
-        match tokio::fs::read_to_string(&self.config_path).await {
-            Ok(current_content) => {
-                let mut last_content = self.last_known_content.lock().await;
-                if *last_content != current_content {
-                    if !last_content.is_empty() {
-                        info!("Hot reload signal received. Configuration change detected. Reloading...");
-                    } else {
-                        info!("Hot reload signal received. Initializing configuration state.");
-                    }
+        let current_content = match tokio::fs::read_to_string(&self.config_path).await {
+            Ok(content) => content,
+            Err(e) => {
+                warn!("Failed to read configuration file '{}': {}", self.config_path, e);
+                return None;
+            }
+        };
 
-                    match serde_yaml::from_str::<AppConfig>(&current_content) {
-                        Ok(new_config) => {
-                            self.shared_config.store(Arc::new(new_config.clone()));
-                            *last_content = current_content;
-                            info!("Successfully reloaded and applied new configuration.");
-                            return Some(new_config);
-                        }
-                        Err(e) => {
-                            warn!(
-                                "Failed to parse reloaded configuration '{}': {}",
-                                self.config_path, e
-                            );
-                        }
-                    }
-                } else {
-                    info!("Hot reload signal received. No configuration change detected.");
-                }
+        let mut last_content = self.last_known_content.lock().await;
+
+        if *last_content == current_content {
+            info!("Hot reload signal received. No configuration change detected.");
+            return None;
+        }
+
+        if !last_content.is_empty() {
+            info!("Hot reload signal received. Configuration change detected. Reloading...");
+        } else {
+            info!("Hot reload signal received. Initializing configuration state.");
+        }
+
+        match serde_yaml::from_str::<AppConfig>(&current_content) {
+            Ok(new_config) => {
+                self.shared_config.store(Arc::new(new_config.clone()));
+                *last_content = current_content;
+                info!("Successfully reloaded and applied new configuration.");
+                Some(new_config)
             }
             Err(e) => {
-                warn!(
-                    "Failed to read configuration file '{}': {}",
-                    self.config_path, e
-                );
+                warn!("Failed to parse reloaded configuration '{}': {}", self.config_path, e);
+                None
             }
         }
-        None
     }
 }
 
