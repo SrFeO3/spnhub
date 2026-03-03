@@ -815,7 +815,7 @@ realms:
                 -----END PRIVATE KEY-----
             services:
                 - name: api
-                  urn: urn:chip-in:network:development:hub2:api
+                  urn: urn:chip-in:service:development:hub2:api
                   title: api service
                   description: API service for retrieving fruit product data.
                   availabilityManagement:
@@ -839,7 +839,7 @@ realms:
                       - urn:chip-in:end-point:hub.master.sr.example.com:api-gateway
                   singleton: false
                 - name: auth
-                  urn: urn:chip-in:network:development:hub2:auth
+                  urn: urn:chip-in:service:development:hub2:auth
                   title: auth service
                   description: OpenID Connect (OIDC) authentication service.
                   availabilityManagement:
@@ -860,7 +860,7 @@ realms:
                       - urn:chip-in:end-point:hub.master.sr.example.com:auth-gateway
                   singleton: false
                 - name: database
-                  urn: urn:chip-in:network:development:hub2:database
+                  urn: urn:chip-in:service:development:hub2:database
                   title: database service
                   description: Database service for the fruit shop.
                   availabilityManagement:
@@ -884,7 +884,7 @@ realms:
                       - urn:chip-in:end-point:hub.master.sr.example.com:database-client
                   singleton: false
                 - name: www
-                  urn: urn:chip-in:network:development:hub2:www
+                  urn: urn:chip-in:service:development:hub2:www
                   title: www service
                   description: Web frontend service for the fruit shop.
                   availabilityManagement:
