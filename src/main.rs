@@ -42,14 +42,8 @@ const GRACEFUL_SHUTDOWN_DRAIN_TIMEOUT: Duration = Duration::from_secs(30);
 /// Command-line arguments.
 #[derive(Parser)]
 struct Args {
-    // command-line arguments or environment variables
-    //#[arg(
-    //    long,
-    //    env = "SPNHUB_INVENTORY_URL",
-    //    default_value = "192.168.10.130:2379"
-    //)]
-    // spn_inventory_url: String,
-    #[arg(long, default_value = "conf/config.yaml")]
+    /// Path to the configuration file or URL of the repository server.
+    #[arg(long, env = "SPNHUB_INVENTORY_URL", default_value = "http://localhost:3000/v1")]
     config: String,
 }
 
@@ -77,7 +71,7 @@ struct RunningHub {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // log
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
@@ -92,7 +86,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
     // Load initial config
-    let (initial_config, initial_content) = load_initial_config(&args.config)?;
+    let (initial_config, initial_content) = load_initial_config(&args.config).await?;
     let shared_config = Arc::new(ArcSwap::from_pointee(initial_config.clone()));
 
     // Start hot-reload service
@@ -131,6 +125,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 info!("SIGUSR1 received, reloading configuration...");
                 if let Some(new_config) = reload_service.check_and_reload().await {
                     reconcile_hubs(&new_config, &mut running_hubs, shared_config.clone()).await;
+                } else {
+                    info!("Configuration has not changed, no action taken.");
                 }
             }
         }
@@ -150,6 +146,17 @@ async fn reconcile_hubs(
     running_hubs: &mut HashMap<HubKey, RunningHub>,
     shared_config: Arc<ArcSwap<AppConfig>>,
 ) {
+    info!("Loaded configuration details:");
+    for realm in &config.realms {
+        info!(
+            "- Realm: '{}' (disabled: {})",
+            realm.realm_name, realm.disabled
+        );
+        for hub in &realm.hubs {
+            info!("  - Hub: '{}' listening on {}:{}", hub.name, hub.server_address, hub.server_port);
+        }
+    }
+
     // 1. Identify hubs that need to be stopped (removed or port changed)
     let mut to_stop = Vec::new();
     for (key, running_hub) in running_hubs.iter_mut() {
