@@ -104,6 +104,16 @@ realms:
                   title: sirius
                   description: Subdomain configuration for 'sirius'.
                   fqdn: sirius.test.example.com
+                - name: betelgeuse
+                  urn: "urn:chip-in:subdomain:forge:test.example.com:betelgeuse"
+                  title: betelgeuse
+                  description: Subdomain configuration for 'betelgeuse'.
+                  fqdn: betelgeuse.test.example.com
+                - name: procyon
+                  urn: "urn:chip-in:subdomain:forge:test.example.com:procyon"
+                  title: procyon
+                  description: Subdomain configuration for 'procyon'.
+                  fqdn: procyon.test.example.com
       virtualHosts:
           - name: "www"
             title: "www"
@@ -386,6 +396,119 @@ realms:
                 vx2GQEX/+amdfPthcqN4Bm4=
                 -----END PRIVATE KEY-----
             disabled: true
+          - name: "betelgeuse"
+            title: "betelgeuse"
+            description: Virtual host configuration for the betelgeuse website.
+            subdomain: "urn:chip-in:subdomain:forge:test.example.com:betelgeuse"
+            certificate: |
+                -----BEGIN CERTIFICATE-----
+                MIIDozCCAougAwIBAgIUOCU9p0Z5rkJksIl9EuEW5H+UFZYwDQYJKoZIhvcNAQEL
+                BQAwVjELMAkGA1UEBhMCSlAxDjAMBgNVBAgMBVRva3lvMQ0wCwYDVQQHDARVZW5v
+                MRIwEAYDVQQKDAlGb3JnZVNob3AxFDASBgNVBAMMC1Rlc3RGb3JnZUNBMB4XDTI2
+                MDMwNTAyMDUyNloXDTM2MDMwMjAyMDUyNlowVTELMAkGA1UEBhMCSlAxDjAMBgNV
+                BAgMBVRva3lvMQ0wCwYDVQQHDARVZW5vMRIwEAYDVQQKDAlGb3JnZVNob3AxEzAR
+                BgNVBAMMCmJldGVsZ2V1c2UwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIB
+                AQDYVcFNool6AMY3hqFXC+wyHhCmiLUkHFu/mNbHQv2HaE4mHL/QjnYxr59fA6Uy
+                a2tklQsfJSwI/ilF0HVNvy0e5xFgiiO5n2sW8vpjouhEJXEMHq+svQ3L0QPCFBMq
+                D/s+q0sJB+aCRRdz0qXDtldGf2BbEZVHer7D6pH2tuJJXtDFGjo7d65TdFxgiX17
+                LUVtlpaWv5tlRGMwMvnmLKORlWafFrw+HONT+5GY9PS7mDKbvEZn5IZNN8SvD9Cm
+                mhcMtL3OhSEwGyG5cfMYE3rvyu+Z+z4kFuQeXw33TWnyekI2SBHOeYEUDZw49eyP
+                GPfvahJEY7sZwbZYrtI42eeFAgMBAAGjajBoMCYGA1UdEQQfMB2CG2JldGVsZ2V1
+                c2UudGVzdC5leGFtcGxlLmNvbTAdBgNVHQ4EFgQUsNRZdIKNfy1KaW2dk9LlQtSV
+                TJMwHwYDVR0jBBgwFoAURgPU9RK7Syq3MHCAlDg2vfsYEvowDQYJKoZIhvcNAQEL
+                BQADggEBAHX9UZsc8BzarsroTLYd1CaFnbC7A5stIsEZzIUYPzK+FByxVfGrAj/X
+                fSmzOyocO8P5vDLLi6Ve80wUvNX+QNvuEL68dsgPNyOzEmgQki0b6soAvzKe6EoV
+                NU9Sg926MlQoNWvYRMSChNjN76e7IaBgdq4VRp683QoK1WGIXXvdVQBykH3pQh8+
+                Z3NEp+0aFy8RXMP1rebRJz5XNYuQCiVqDw0u338WlyZQvp5KQM2BYeSAv+e9ph3C
+                EfiS2lbqctvCjuKVSeg8/h/a/dJFHVr7sTzjGA72v2RZFGWYZadrK5MiKlhZNX6U
+                vfqpkqAgcTmv9c+VEyPZMaVpHVVfx/s=
+                -----END CERTIFICATE-----
+            key: |
+                -----BEGIN PRIVATE KEY-----
+                MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDYVcFNool6AMY3
+                hqFXC+wyHhCmiLUkHFu/mNbHQv2HaE4mHL/QjnYxr59fA6Uya2tklQsfJSwI/ilF
+                0HVNvy0e5xFgiiO5n2sW8vpjouhEJXEMHq+svQ3L0QPCFBMqD/s+q0sJB+aCRRdz
+                0qXDtldGf2BbEZVHer7D6pH2tuJJXtDFGjo7d65TdFxgiX17LUVtlpaWv5tlRGMw
+                MvnmLKORlWafFrw+HONT+5GY9PS7mDKbvEZn5IZNN8SvD9CmmhcMtL3OhSEwGyG5
+                cfMYE3rvyu+Z+z4kFuQeXw33TWnyekI2SBHOeYEUDZw49eyPGPfvahJEY7sZwbZY
+                rtI42eeFAgMBAAECggEABLs7aGXu+SAd4FutblNFwy2CfQyYXvB6gTeShaEix7IG
+                +NvAG4uXbNbDzDbZh2oaBdp3TSMUUiNc5mNSGB/fmMFs+940PHxkFzMROYSil9BJ
+                0f4J0Y6rnT2LsNRHka/vysXBn7JF3wDWgSNQ73WEIHfrX5KENUqrSWr5Q5q/BY5n
+                A5bzHwR08MtWn4imPTycndBj4nFb9wxTiEs3wKJUMdS1uAgsQ2WlbX+qS7Cf69k5
+                IeTrV2ocR1oR/JbTaG6j0+Ggf8t0z8S8Vf0xUIHoJjQBoZlodJ2s/I+TepFsn98Q
+                PY4xKBzSwl4Ln3HwoU88RFimIkWHPuIBjfDB69TBgQKBgQDx4fvgOT+FwK6A+XIH
+                zsMLVUZ5oUXT3CJLGUkIaP1Lws1GxPUnifNCVftVZI2vabaSWi857+Oc5RpMO+qL
+                9NWzQCLf6kTA52xk3ZyXJ38zqcTdRTqE0JrPd4G+Em6Xzedw+zJCOLLgxCPETfH5
+                5+H31O6/FIWmM/R1MHXSvjG56QKBgQDk9g6gYoDMbZLC1m7HQbINXiVrwNzkRx3S
+                rh4WbVWJEvdbQSVWoEtMIQzkrzzzjbAn6kN7JN8mleUHz6MBq+yWyXPLEBO8WB+Y
+                46g8rZAc3XPiLaGjDkgeQRQTvPCWYGb6y3CIryQtrGfwqA6mlSPn407Tf7Rf1pNO
+                +pAuho/jPQKBgQDLGoya7LcwImjlF4/uimkwfPxeaVLu4KtTD/pJO49lLD+eKwgH
+                mUhP7U7Ll1F5d3S8U0nQhmRDfASm+rCpsH44s6QVDOuKZ0iXMZapPZsL0IPjoJvQ
+                pjE4AAtLhMKkaVrrfaHoBR/+p/O4hBKpW1Jc/ckzXZITyxB7zqNAwD+U8QKBgA+W
+                qRxGWJqSg0F8tAIg+OxsEoQpl2B7bw5fCHFidEZm4ix2XQJu23GNdoFDZRT3+pxd
+                GMcTlZXc8sD7ZA/DEtKZWKbkq1NRdKVGKrgm4P72HOOzU6P0XvigWauWW5MBcUF2
+                BG1p7z6k1FbQOl8hHFa3ZTCFK1SzGUhxSsvAIZ/JAoGAWHrFZNSUKm3nZBvwdCEz
+                Wve9a8pH4bJYbrNVHRA0ArjXAUBo/Y3YmgjADIFciF5olRfM++aughy0xF9jprF6
+                6fg14wC9Jcq7nP2fAKLEfxSuUoAqfd7JP2gOGx4x2W5VZ0RQZkKfwT1DMbbLwsPZ
+                oiQ/mZkNXXJbmRKWgGmJ838=
+                -----END PRIVATE KEY-----
+            disabled: false
+          - name: "procyon"
+            title: "procyon"
+            description: Virtual host configuration for the procyon website.
+            subdomain: "urn:chip-in:subdomain:forge:test.example.com:procyon"
+            certificate: |
+                -----BEGIN CERTIFICATE-----
+                MIIDnTCCAoWgAwIBAgIUOCU9p0Z5rkJksIl9EuEW5H+UFZcwDQYJKoZIhvcNAQEL
+                BQAwVjELMAkGA1UEBhMCSlAxDjAMBgNVBAgMBVRva3lvMQ0wCwYDVQQHDARVZW5v
+                MRIwEAYDVQQKDAlGb3JnZVNob3AxFDASBgNVBAMMC1Rlc3RGb3JnZUNBMB4XDTI2
+                MDMwNTAyMDUyNloXDTM2MDMwMjAyMDUyNlowUjELMAkGA1UEBhMCSlAxDjAMBgNV
+                BAgMBVRva3lvMQ0wCwYDVQQHDARVZW5vMRIwEAYDVQQKDAlGb3JnZVNob3AxEDAO
+                BgNVBAMMB3Byb2N5b24wggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQDh
+                YS47ILd+Stc2Jlt10lHzzHMdCy4/Fbz0feTfD54fWo8M/LnR6JQ3RxeotSlu3N0f
+                tKTWSAOq1iWLPIZLE/AiIi2ro1+lJ6AGm1YkXACO456UoZIMcePY5gOviSUU8Nen
+                HGq5PQLBSdvfKoM2uTM33Z5qpo/hZcsaHRJzJRbDelwkXNZMrP6xEDxYzyXMVY9B
+                2oCiF0Vju9PyBxbARqAFr9BGP05Qs6IUtv8/nVdwVDhl1OnXzlowqC7pHp0dg3MF
+                ZNZv9Ds9HmLy/Qad/O7sCZjiJMSGSjIQZ54cx4ml4CqsiGp4i7aRaxsAQJxH+547
+                ldEYy0x3yJDvoEJQT5/lAgMBAAGjZzBlMCMGA1UdEQQcMBqCGHByb2N5b24udGVz
+                dC5leGFtcGxlLmNvbTAdBgNVHQ4EFgQUb+hDfV1zFBMNtmHEhzf2BEvEKWEwHwYD
+                VR0jBBgwFoAURgPU9RK7Syq3MHCAlDg2vfsYEvowDQYJKoZIhvcNAQELBQADggEB
+                AEe3cany7iDGotPkvWV6EpoofKL4aW6JEOBZ3deiOrh1IBi6yZWHGVDADYfg+WxN
+                o1E8zl7UEK0cdBnacV8FNOb+dd40Y3ZWxtrbQFbvh4yhkKd1an11wogZy5Xw0LoH
+                Hhn3gmzJZRc++eZhPjnjM2hjhOBKOhENU0M2BHkvUGbaK9KJbnDEdG43IEXyyWzn
+                OgyhuXMgvABZO/YKeb7wyVyPVk9bLiJaBe8Y63oAasMSsT3eJWOs44bVZdGLPfvY
+                UdpaMuahWYI29N1Mnt1T68tsezxS+VTbnVYfzciEZDoPPNxNg6wIfJg1vOdtX21o
+                Q/9uPGurda+dw2BXx9HY5X4=
+                -----END CERTIFICATE-----
+            key: |
+                -----BEGIN PRIVATE KEY-----
+                MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDhYS47ILd+Stc2
+                Jlt10lHzzHMdCy4/Fbz0feTfD54fWo8M/LnR6JQ3RxeotSlu3N0ftKTWSAOq1iWL
+                PIZLE/AiIi2ro1+lJ6AGm1YkXACO456UoZIMcePY5gOviSUU8NenHGq5PQLBSdvf
+                KoM2uTM33Z5qpo/hZcsaHRJzJRbDelwkXNZMrP6xEDxYzyXMVY9B2oCiF0Vju9Py
+                BxbARqAFr9BGP05Qs6IUtv8/nVdwVDhl1OnXzlowqC7pHp0dg3MFZNZv9Ds9HmLy
+                /Qad/O7sCZjiJMSGSjIQZ54cx4ml4CqsiGp4i7aRaxsAQJxH+547ldEYy0x3yJDv
+                oEJQT5/lAgMBAAECggEAIeYVR0juOHVmxcsCpifOckI9zTBFkjEBlO+LmV5WvOYI
+                zp4Dj/Ywtti/Tv2CoB1ht/dadK1rucoQZw8hLtEupN+pqV9/Dw7085FxJTJeVh+X
+                1kiv+CW4LMM56jDRTkNEWGr+hWKPE8X5Z2lUR4qXEM/JWEa5rN/76q9VO1Loh9mL
+                BsMahGv/iaGKx8nCr1d5ZRHJcDVmCcV5fzQwYgUbz9iZh/H0HJf2wpQGaKezZHIb
+                t27+FdYRjP/F7eB+F8X2goBxcGPomxKu4WGXvehZPJumSyh7DG7D+LGLp0Glt1cN
+                mbftDOEBG+Bkfu7ccngCCRdX7cWcMP2gd6h/rPydCQKBgQD7F4yN+pHo94yvb0Gk
+                3mAAEuonn9GT4xL0QQ9xqKbaGeCfTCklduoUj7OUuKSDY+P3qMa7Kk7JTwfY+dnV
+                duWZgBI5Gvjb+o8dXe85bAHa1lnbCybZyoS32I8b5BQyNug46WPhHMBcCpJtIwxh
+                9n7PkCGxx9T9zCJuICw8VktD+QKBgQDlyPfayds/9nO+ON9vfM6d1hGcCHAi2PC6
+                U+clDRfcE0mCmgwU2h97FEr/j+WGOt/HrMKEIDn8noJwUSeGTt3Vj6kIomXsc0rw
+                ActH4zCRY1yFWhq+3Vs7z8EtjjiKJezjjkP/5oqkMHe71ZkqifzvDXu33zCZfVQR
+                zhwwKp0eTQKBgGSZNb34gxb0f1AWYhV85reA3IGNnXkDxCdKHbbq3BaLwZvw9pdF
+                AlnEjS1roLXngoFKBH0eYTx0Rm+fArBsl2adki+A5+2ygD5C0UKPTFryAEQrPqCJ
+                bA0AXa3N/m1z5CxRDaw2SbdWoP3Kyf5BtOLSGz3QEzyv2aeHilGOPU95AoGBAL8f
+                TvhNmO00ocSALWffmUMywGbVpd92LZPtIX5xy3yjFito0c+uNSz8Df1OxIvHAEZm
+                bUvUOibh+IBPH97YTi7JVMD3wmrO4m+KLnhWgRkMWfIYpdJG7xFqlbS8bE6LiOMk
+                e26nZH14Sr6SxNja+OQkhNjE7PldgsVkd5GggBqpAoGACWMqqQqhDjFE5sOBRkC1
+                arTDvfc5+yoclgcICFn4bYiU74bqgH68XmW6axtnE9Up9yoOBQtb2Lut4UCnKQVV
+                I+hmJweBUMuzZLflZfb5cjOGhJZ+XLd3+JnvgDQZUh7/yJ1JytKnCsrZ8kU4Q/av
+                u7yWPglA/258FjWO7qMYY3Y=
+                -----END PRIVATE KEY-----
       routingChains:
           - name: fruit-shop-route
             title: Routing-Chain fruit-shop-route
