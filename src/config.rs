@@ -175,8 +175,15 @@ impl ConfigHotReloadService {
 /// Loads the initial configuration
 pub async fn load_initial_config(path: &str) -> Result<(AppConfig, String), Box<dyn std::error::Error + Send + Sync>> {
     if path.starts_with("http://") || path.starts_with("https://") {
-        return fetch_config_from_url(path).await;
+        info!("Loading configuration from repository: {}", path);
+        match fetch_config_from_url(path).await {
+            Ok(res) => return Ok(res),
+            Err(e) => {
+                warn!("Failed to fetch configuration from repository: {}. Falling back to local file.", e);
+            }
+        }
     }
+    info!("Loading configuration from file: {}", path);
     let content = tokio::fs::read_to_string(path).await
         .map_err(|e| format!("Failed to read configuration file '{}': {}", path, e))?;
     let config = serde_yaml::from_str(&content)
