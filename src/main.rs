@@ -807,15 +807,41 @@ impl ProviderHandler {
             let mut providers_by_service = self.provider_connections.write().await;
             if let Some(providers_for_service) = providers_by_service.get_mut(&self.context.service)
             {
+                // Check if the disconnecting provider was active before removing it.
+                let was_active = providers_for_service
+                    .get(&self.context.connection_id)
+                    .map_or(false, |e| e.status == ProviderStatus::Active);
+
+                // Remove the provider from the map.
                 if providers_for_service.remove(&self.context.connection_id).is_some() {
+                    info!(
+                        "Provider '{}' removed from connection map.",
+                        self.context.uri
+                    );
+
+                    // If an active provider was removed and no other active provider exists for this service,
+                    // promote the oldest standby provider to maintain service availability.
+                    if was_active && !providers_for_service.values().any(|e| e.status == ProviderStatus::Active) {
+                        let to_promote_key = providers_for_service.iter()
+                            .filter(|(_, e)| e.status == ProviderStatus::StandBy)
+                            .min_by_key(|(_, e)| e.created_at)
+                            .map(|(k, _)| *k);
+
+                        if let Some(key) = to_promote_key {
+                            if let Some(entry) = providers_for_service.get_mut(&key) {
+                                entry.status = ProviderStatus::Active;
+                                info!(
+                                    "Promoted standby provider '{}' to Active for service '{}' due to active provider disconnection.",
+                                    entry.uri, self.context.service
+                                );
+                            }
+                        }
+                    }
+
+                    // Clean up the service entry if no providers are left.
                     if providers_for_service.is_empty() {
                         providers_by_service.remove(&self.context.service);
                     }
-                    let total_providers: usize = providers_by_service.values().map(|v| v.len()).sum();
-                    info!(
-                        "Provider '{}' removed from connection map. (Total providers remaining: {})",
-                        self.context.uri, total_providers
-                    );
                 }
             }
         }
