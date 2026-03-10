@@ -369,6 +369,8 @@ impl Server {
 
                     let provider_connections = self.provider_connections.clone();
                     let consumer_connections = self.consumer_connections.clone();
+                    let realm_name = self.realm_name.clone();
+                    let hub_name = self.hub_name.clone();
                     let service_map = self.service_map.clone();
                     let shared_config = self.shared_config.clone();
                     // Spawn an asynchronous task for each new connection.
@@ -419,6 +421,8 @@ impl Server {
                                             ConsumerHandler::new(
                                                 connection.clone(),
                                                 cn,
+                                                realm_name,
+                                                hub_name,
                                                 provider_connections,
                                                 consumer_connections,
                                                 service_map,
@@ -880,6 +884,8 @@ impl ConsumerHandler {
     fn new(
         connection: quinn::Connection,
         cn: String,
+        realm_name: String,
+        hub_name: String,
         provider_connections: Arc<RwLock<HashMap<String, HashMap<usize, ProviderEntry>>>>,
         consumer_connections: Arc<RwLock<HashMap<String, HashMap<usize, ConsumerEntry>>>>,
         service_map: Arc<HashMap<String, ServiceInfo>>,
@@ -921,9 +927,9 @@ impl ConsumerHandler {
         let service_config = config
             .realms
             .iter()
-            .flat_map(|r| &r.hubs)
-            .flat_map(|h| &h.services)
-            .find(|s| s.name == context.service);
+            .find(|r| r.realm_name == realm_name)
+            .and_then(|r| r.hubs.iter().find(|h| h.name == hub_name))
+            .and_then(|h| h.services.iter().find(|s| s.name == context.service));
 
         let (provider_urn, availability_config) = match service_config {
             Some(s) => (
