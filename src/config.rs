@@ -91,7 +91,7 @@ pub struct ServiceConfig {
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct AvailabilityManagementConfig {
-    pub _service_id: String,
+    pub service_id: String,
     pub _cluster_manager_urn: Option<String>,
     pub _start_at: Option<String>,
     pub _stop_at: Option<String>,
@@ -99,7 +99,7 @@ pub struct AvailabilityManagementConfig {
     pub ondemand_start_on_payload: bool,
     pub _idle_timeout: u64,
     pub image: String,
-    pub _command: Option<String>,
+    pub command: Option<Vec<String>>,
     pub env: Option<HashMap<String, String>>,
     pub options: Option<Vec<String>>,
 }
@@ -320,7 +320,7 @@ async fn fetch_config_from_url(url: &str) -> Result<(AppConfig, String), Box<dyn
                         consumers: s.consumers,
                         _singleton: s.singleton.unwrap_or(false),
                         availability_management: AvailabilityManagementConfig {
-                            _service_id: am.service_id,
+                            service_id: am.service_id,
                             _cluster_manager_urn: Some(am.cluster_manager_urn),
                             _start_at: am.start_at,
                             _stop_at: am.stop_at,
@@ -328,7 +328,7 @@ async fn fetch_config_from_url(url: &str) -> Result<(AppConfig, String), Box<dyn
                             ondemand_start_on_payload: am.ondemand_start_on_payload.unwrap_or(false),
                             _idle_timeout: am.idle_timeout.unwrap_or(0) as u64,
                             image: am.image.unwrap_or_default(),
-                            _command: am.command.map(|c| c.join(" ")),
+                            command: am.command,
                             env: am.env,
                             options: am.options,
                         }

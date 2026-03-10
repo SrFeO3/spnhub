@@ -92,14 +92,16 @@ impl From<Error> for StartError {
 async fn start_container(
     image: &str,
     options: &[String],
+    service_id: &str,
     env: Option<&HashMap<String, String>>,
+    command: Option<&Vec<String>>,
 ) -> Result<ContainerHandle, StartError> {
-    tracing::info!("Starting container for image: {} with options: {:?}", image, options);
+    tracing::info!("Starting container for service: {}, image: {}, options: {:?}", service_id, image, options);
 
     let docker = Docker::connect_with_local_defaults()?;
 
-    // Generate a dedicated container name (e.g., "nginx:latest" -> "spn_nginx_latest")
-    let container_name = format!("spn_{}", image.replace(|c: char| !c.is_alphanumeric(), "_"));
+    // Generate a dedicated container name from the unique service ID
+    let container_name = format!("spn_{}", service_id.replace(|c: char| !c.is_alphanumeric(), "_"));
 
     // Parse options list to configure HostConfig
     let mut network_mode = None;
@@ -179,6 +181,7 @@ async fn start_container(
         image: Some(image.to_string()),
         host_config: Some(host_config),
         env: env_vars,
+        cmd: command.cloned(),
         ..Default::default()
     };
 
@@ -245,7 +248,9 @@ pub async fn start_provider(
     let result = start_container(
         &config.image,
         config.options.as_deref().unwrap_or(&[]),
+        &config.service_id,
         config.env.as_ref(),
+        config.command.as_ref(),
     )
     .await;
 
