@@ -1848,7 +1848,7 @@ dependencies = [
 
 [[package]]
 name = "spnhub"
-version = "0.97.1"
+version = "0.97.3"
 dependencies = [
  "arc-swap",
  "bollard",

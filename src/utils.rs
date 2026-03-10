@@ -94,10 +94,10 @@ pub fn create_server_config(
         = quinn::ServerConfig::with_crypto(Arc::new(QuicServerConfig::try_from(Arc::new(server_config))?));
     Arc::get_mut(&mut quinn_server_config.transport)
         .unwrap()
-        .max_concurrent_uni_streams(crate::MAX_CONCURRENT_UNI_STREAMS.into())
-        .keep_alive_interval(Some(Duration::from_secs(crate::KEEP_ALIVE_INTERVAL_SECS)))
-        .datagram_receive_buffer_size(Some(crate::DATAGRAM_RECEIVE_BUFFER_SIZE))
-        .max_idle_timeout(Some(Duration::from_secs(crate::IDLE_TIMEOUT_SECS).try_into()?));
+        .max_concurrent_uni_streams(crate::QUIC_MAX_CONCURRENT_UNI_STREAMS.into())
+        .keep_alive_interval(Some(Duration::from_secs(crate::QUIC_KEEP_ALIVE_INTERVAL_SECS)))
+        .datagram_receive_buffer_size(Some(crate::QUIC_DATAGRAM_RECEIVE_BUFFER_SIZE))
+        .max_idle_timeout(Some(Duration::from_secs(crate::QUIC_IDLE_TIMEOUT_SECS).try_into()?));
 
     Ok(quinn_server_config)
 }

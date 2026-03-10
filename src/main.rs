@@ -31,13 +31,35 @@ mod utils;
 
 use crate::config::{AppConfig, ConfigHotReloadService, HubConfig, RealmConfig, load_initial_config};
 
-const MAX_CONCURRENT_UNI_STREAMS: u8 = 0;
-const DATAGRAM_RECEIVE_BUFFER_SIZE: usize = 1024 * 1024;
+// --- QUIC Parameters ---
+const QUIC_MAX_CONCURRENT_UNI_STREAMS: u8 = 0;
+const QUIC_DATAGRAM_RECEIVE_BUFFER_SIZE: usize = 1024 * 1024;
+const QUIC_KEEP_ALIVE_INTERVAL_SECS: u64 = 5;
+const QUIC_IDLE_TIMEOUT_SECS: u64 = 20;
 
-const KEEP_ALIVE_INTERVAL_SECS: u64 = 5;
-const IDLE_TIMEOUT_SECS: u64 = 20;
-
+// --- Application Logic Constants ---
+/// Interval for reporting server statistics.
+const STATS_REPORT_INTERVAL_SECS: u64 = 10;
+/// Interval for a consumer to retry finding a provider.
+const PROVIDER_SEARCH_INTERVAL_SECS: u64 = 1;
+/// The maximum time a consumer will wait to find an available provider.
+const PROVIDER_SEARCH_TIMEOUT_SECS: u64 = 600;
+/// Capacity for the MPSC channel that reports errors from stream proxy tasks.
+const ERROR_CHANNEL_CAPACITY: usize = 32;
+/// The delay between retries when a consumer fails to connect to a provider, to prevent busy-looping.
+const CONSUMER_PROVIDER_RETRY_DELAY: Duration = Duration::from_millis(500);
+/// The polling interval to check if all connections are drained during a graceful shutdown.
+const GRACEFUL_SHUTDOWN_POLL_INTERVAL: Duration = Duration::from_millis(500);
+/// The maximum time to wait for connections to drain during a graceful shutdown.
 const GRACEFUL_SHUTDOWN_DRAIN_TIMEOUT: Duration = Duration::from_secs(30);
+
+// --- Application-Specific QUIC Error Codes ---
+/// Error code for when a client connects without a valid CN or ALPN.
+const APP_ERR_CODE_MISSING_IDENTITY: u32 = 1;
+/// Error code for when a client connects with an unsupported ALPN role.
+const APP_ERR_CODE_UNSUPPORTED_ROLE: u32 = 2;
+/// Error code for when a consumer cannot find an available provider for its service.
+const APP_ERR_CODE_NO_PROVIDER_FOUND: u32 = 100;
 
 /// Command-line arguments.
 #[derive(Parser)]
@@ -349,7 +371,7 @@ impl Server {
     async fn run(&self, mut shutdown_rx: mpsc::Receiver<ShutdownMode>) {
         info!("Server (Realm: {}, Hub: {}) is ready to accept connections.", self.realm_name, self.hub_name);
 
-        let mut stats_interval = time::interval(Duration::from_secs(10));
+        let mut stats_interval = time::interval(Duration::from_secs(STATS_REPORT_INTERVAL_SECS));
         // Prevent tick buildup if processing lags
         stats_interval.set_missed_tick_behavior(time::MissedTickBehavior::Skip);
 
@@ -392,8 +414,8 @@ impl Server {
                                         (Some(cn), Some(alpn)) => (cn, alpn),
                                         _ => {
                                             warn!("Could not identify client by CN or ALPN. Closing connection.");
-                                            // Close the connection with an application-defined error code (1).
-                                            connection.close(1u32.into(), b"Missing CN or ALPN");
+                                            // Close the connection with an application-defined error code.
+                                            connection.close(APP_ERR_CODE_MISSING_IDENTITY.into(), b"Missing CN or ALPN");
                                             return;
                                         }
                                     };
@@ -436,7 +458,7 @@ impl Server {
                                                 "Unsupported ALPN protocol: {}. Closing connection.",
                                                 unsupported
                                             );
-                                            connection.close(2u32.into(), b"Unsupported client role");
+                                            connection.close(APP_ERR_CODE_UNSUPPORTED_ROLE.into(), b"Unsupported client role");
                                             Ok(()) // Return Ok to end the task for this connection gracefully.
                                         }
                                     };
@@ -499,7 +521,7 @@ impl Server {
                                     info!("All connections drained.");
                                     break;
                                 }
-                                time::sleep(Duration::from_millis(500)).await;
+                                time::sleep(GRACEFUL_SHUTDOWN_POLL_INTERVAL).await;
                             }
                         }
                         ShutdownMode::Immediate => {
@@ -1141,7 +1163,7 @@ impl ConsumerHandler {
             provider_conn.stable_id()
         );
         // Channel for spawned tasks to signal errors back to this loop.
-        let (error_tx, mut error_rx) = mpsc::channel::<ProxyError>(32);
+        let (error_tx, mut error_rx) = mpsc::channel::<ProxyError>(ERROR_CHANNEL_CAPACITY);
 
         loop {
             tokio::select! {
@@ -1257,8 +1279,8 @@ impl ConsumerHandler {
 
         let reason = 'main_loop: loop {
             // 1. Find a provider.
-            let search_interval = Duration::from_secs(1);
-            let search_timeout = Duration::from_secs(600);
+            let search_interval = Duration::from_secs(PROVIDER_SEARCH_INTERVAL_SECS);
+            let search_timeout = Duration::from_secs(PROVIDER_SEARCH_TIMEOUT_SECS);
             self.find_and_set_target_provider(search_interval, search_timeout)
                 .await;
 
@@ -1270,7 +1292,7 @@ impl ConsumerHandler {
                         self.context.service
                     );
                     let app_close = quinn::ApplicationClose {
-                        error_code: 100u32.into(), // Custom error code for "no provider found"
+                        error_code: APP_ERR_CODE_NO_PROVIDER_FOUND.into(),
                         reason: b"No provider available for the requested service"
                             .to_vec()
                             .into(),
@@ -1284,7 +1306,7 @@ impl ConsumerHandler {
                 ProxyLoopResult::ProviderError => {
                     // A recoverable provider error occurred, loop again to find a new one.
                     // Brief pause to avoid busy loop if the broken provider is not yet removed from the map.
-                    time::sleep(Duration::from_millis(500)).await;
+                    time::sleep(CONSUMER_PROVIDER_RETRY_DELAY).await;
                     continue 'main_loop;
                 }
                 ProxyLoopResult::ConnectionClosed(e) => {
