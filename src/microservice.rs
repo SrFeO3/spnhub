@@ -26,7 +26,7 @@ use std::collections::HashMap;
 use bollard::Docker;
 use bollard::errors::Error;
 use bollard::models::{ContainerCreateBody, HostConfig, PortBinding};
-use bollard::query_parameters::{CreateContainerOptions, StartContainerOptions};
+use bollard::query_parameters::{CreateContainerOptions, RemoveContainerOptions, StartContainerOptions, StopContainerOptions};
 
 use crate::config::AvailabilityManagementConfig;
 
@@ -58,6 +58,28 @@ impl std::error::Error for StartError {}
 impl From<Error> for StartError {
     fn from(err: Error) -> Self {
         StartError::Docker(err)
+    }
+}
+
+/// Errors that can occur during container shutdown.
+#[derive(Debug)]
+pub enum StopError {
+    Docker(Error),
+}
+
+impl std::fmt::Display for StopError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            StopError::Docker(e) => write!(f, "Docker error: {}", e),
+        }
+    }
+}
+
+impl std::error::Error for StopError {}
+
+impl From<Error> for StopError {
+    fn from(err: Error) -> Self {
+        StopError::Docker(err)
     }
 }
 
@@ -260,4 +282,46 @@ pub async fn start_provider(
     }
 
     result
+}
+
+/// Stops and removes a microservice container using Docker.
+///
+/// # Arguments
+/// - `config`: The availability management configuration containing the service ID.
+pub async fn stop_provider(
+    config: &AvailabilityManagementConfig,
+) -> Result<(), StopError> {
+    let service_id = &config.service_id;
+    tracing::info!("Stopping container for service: {}", service_id);
+
+    let docker = Docker::connect_with_local_defaults()?;
+
+    let container_name = format!("spn_{}", service_id.replace(|c: char| !c.is_alphanumeric(), "_"));
+
+    // Stop the container
+    let stop_options = Some(StopContainerOptions{ signal: None, t: Some(10) }); // 10 second timeout
+    if let Err(e) = docker.stop_container(&container_name, stop_options).await {
+        if let Error::DockerResponseServerError { status_code: 404, .. } = e {
+            tracing::info!("Container {} not found, assuming already stopped.", container_name);
+        } else {
+            tracing::error!("Failed to stop container {}: {}", container_name, e);
+            return Err(e.into());
+        }
+    } else {
+        tracing::info!("Container {} stopped successfully.", container_name);
+    }
+
+    // Remove the container
+    let remove_options = Some(RemoveContainerOptions{ force: true, ..Default::default() });
+    if let Err(e) = docker.remove_container(&container_name, remove_options).await {
+         if let Error::DockerResponseServerError { status_code: 404, .. } = e {
+            // Already removed, not an error.
+         } else {
+            tracing::warn!("Failed to remove container {}: {}", container_name, e);
+         }
+    } else {
+        tracing::info!("Container {} removed successfully.", container_name);
+    }
+
+    Ok(())
 }

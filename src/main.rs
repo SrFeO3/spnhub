@@ -400,7 +400,8 @@ impl Server {
                         &self.hub_name,
                         &self.provider_connections,
                         &self.consumer_connections,
-                        &self.service_map
+                        &self.service_map,
+                        &self.shared_config
                     ).await;
                 }
                 Some(connecting) = self.endpoint.accept() => {
@@ -565,6 +566,7 @@ impl Server {
         providers: &Arc<RwLock<HashMap<String, HashMap<usize, ProviderEntry>>>>,
         consumers: &Arc<RwLock<HashMap<String, HashMap<usize, ConsumerEntry>>>>,
         service_map: &Arc<ArcSwap<HashMap<String, ServiceInfo>>>,
+        shared_config: &Arc<ArcSwap<AppConfig>>,
     ) {
         // 1. Create snapshots to minimize lock duration
         let (provider_snapshot, consumer_snapshot, provider_count, consumer_count) = {
@@ -630,6 +632,64 @@ impl Server {
             )
         }; // Locks are released here
 
+        // 2. Identify and stop idle providers
+        let config = shared_config.load();
+        if let Some(hub_config) = config
+            .realms
+            .iter()
+            .find(|r| r.realm_name == *realm_name)
+            .and_then(|r| r.hubs.iter().find(|h| h.name == *hub_name))
+        {
+            for (service, _cn, conn, _status, _opened, _closed, idle_since) in &provider_snapshot {
+                if let Some(since) = idle_since {
+                    if let Some(service_config) = hub_config.services.iter().find(|s| &s.name == service) {
+                        let am_config = &service_config.availability_management;
+                        let idle_timeout = am_config.idle_timeout;
+
+                        if idle_timeout > 0 {
+                            let idle_duration = (Utc::now() - *since).num_seconds() as u64;
+                            if idle_duration >= idle_timeout {
+                                info!(
+                                    eventType = "idleProviderStopping",
+                                    service = service,
+                                    idle_duration = idle_duration,
+                                    idle_timeout = idle_timeout,
+                                    "Provider has been idle for too long. Initiating stop."
+                                );
+
+                                // Close the QUIC connection. This will trigger its removal from the map in its handler.
+                                conn.close(0u32.into(), b"idle timeout");
+
+                                // Stop the underlying microservice.
+                                // Spawn this so it doesn't block the stats reporting task.
+                                let am_config_clone = am_config.clone();
+                                let service_clone = service.clone();
+                                tokio::spawn(async move {
+                                    match microservice::stop_provider(&am_config_clone).await {
+                                        Ok(_) => {
+                                            info!(
+                                                eventType = "idleProviderStopped",
+                                                service = service_clone,
+                                                "Idle provider stopped successfully."
+                                            );
+                                        }
+                                        Err(e) => {
+                                            warn!(
+                                                eventType = "idleProviderStopFailed",
+                                                service = service_clone,
+                                                error = %e,
+                                                "Failed to stop idle provider."
+                                            );
+                                        }
+                                    }
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // Get tokio thread info (requires `tokio_unstable` feature).
         let tokio_workers = tokio::runtime::Handle::current().metrics().num_workers();
         let tokio_tasks = tokio::runtime::Handle::current()
@@ -647,7 +707,7 @@ impl Server {
             consumer_connections = consumer_count,
         );
 
-        // 2. Log stats outside the lock
+        // 3. Log stats
         for (service, cn, conn, status, opened, closed, idle_since) in provider_snapshot {
             let stats = conn.stats();
             let active_streams = opened.saturating_sub(closed);
@@ -764,22 +824,6 @@ impl ProviderHandler {
                 name: "unknown".to_string(),
                 urn: "unknown".to_string(),
             });
-
-        // set idle timeout by availability management setting
-        //let config = shared_config.load();
-        //if let Some(service_config) = config.realms.iter()
-        //    .flat_map(|r| &r.hubs)
-        //    .flat_map(|h| &h.services)
-        //    .find(|s| s.name == service)
-        //{
-        //    if service_config.availability_management.ondemand_start_on_payload {
-        //        let idle_timeout = service_config.availability_management.idle_timeout;
-        //        if idle_timeout > 0 {
-        //            // connection.set_max_idle_timeout(Some(Duration::from_secs(idle_timeout)));
-        //            warn!("Dynamic idle timeout setting is not supported by the current quinn version");
-        //        }
-        //    }
-        //}
 
         let endpoint_type = "serviceProvider".to_string();
         let context = ConnectionContext {
@@ -1058,8 +1102,8 @@ impl ConsumerHandler {
 
         if should_start {
             info!(
-                "Starting container for provider (trigger: {}): {} (image: {})",
-                trigger, urn, am_config.image
+                "Starting container for provider (trigger: {}, idle_timeout: {}s): {} (image: {})",
+                trigger, am_config.idle_timeout, urn, am_config.image
             );
             if let Err(e) = crate::microservice::start_provider(am_config).await {
                 warn!(
@@ -1435,7 +1479,6 @@ async fn proxy_consumer_stream_to_provider(
     total_closed_streams: Arc<AtomicUsize>,
     consumer_context: ConnectionContext,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    //let stream_id = consumer_recv.id();
     // Consumer-side identifiers
     let consumer_connection_id = consumer_context.connection_id;
     let consumer_stream_id = consumer_recv.id();
