@@ -90,6 +90,8 @@ struct RunningHub {
     config: HubConfig,
     realm_ca_cert: String,
     endpoint: quinn::Endpoint,
+    // Add a swappable service map to allow hot-reloading it.
+    service_map_swap: Arc<ArcSwap<HashMap<String, ServiceInfo>>>,
 }
 
 #[tokio::main]
@@ -227,6 +229,14 @@ async fn reconcile_hubs(
                     // Update stored config state
                     running_hub.config = new_hub.clone();
                     running_hub.realm_ca_cert = new_realm.realm_ca_cert.clone();
+
+                    // Check if service list has changed and reload the service map if so.
+                    if running_hub.config.services != new_hub.services {
+                        info!("Service list changed for hub: {}. Reloading service map...", hub_name);
+                        let new_service_map = Arc::new(build_service_map(&new_hub.services));
+                        running_hub.service_map_swap.store(new_service_map);
+                        info!("Service map reloaded for hub: {}", hub_name);
+                    }
                 }
             }
         }
@@ -265,6 +275,22 @@ async fn reconcile_hubs(
     }
 }
 
+/// Builds a map from a client URN (CN) to its service information.
+fn build_service_map(services: &[config::ServiceConfig]) -> HashMap<String, ServiceInfo> {
+    let mut service_map = HashMap::new();
+    for service in services {
+        let service_info = ServiceInfo {
+            name: service.name.clone(),
+            urn: service.urn.clone(),
+        };
+        service_map.insert(service.provider.clone(), service_info.clone());
+        for consumer in &service.consumers {
+            service_map.insert(consumer.clone(), service_info.clone());
+        }
+    }
+    service_map
+}
+
 async fn start_hub(
     realm: &RealmConfig,
     hub: &HubConfig,
@@ -288,19 +314,9 @@ async fn start_hub(
     let provider_connections = Arc::new(RwLock::new(HashMap::new()));
     let consumer_connections = Arc::new(RwLock::new(HashMap::new()));
 
-    let mut service_map: HashMap<String, ServiceInfo> = HashMap::new();
-    for service in &hub.services {
-        let service_info = ServiceInfo {
-            name: service.name.clone(),
-            urn: service.urn.clone(),
-        };
-        service_map.insert(service.provider.clone(), service_info.clone());
-        for consumer in &service.consumers {
-            service_map.insert(consumer.clone(), service_info.clone());
-        }
-    }
-    info!("Service map for hub {}: {:?}", hub.name, service_map);
-    let service_map = Arc::new(service_map);
+    let service_map = build_service_map(&hub.services);
+    info!("Initial service map for hub {}: {:?}", hub.name, service_map);
+    let service_map_swap = Arc::new(ArcSwap::from_pointee(service_map));
 
     let server = Server::new(
         realm.realm_name.clone(),
@@ -308,7 +324,7 @@ async fn start_hub(
         endpoint.clone(),
         provider_connections,
         consumer_connections,
-        service_map,
+        service_map_swap.clone(),
         shared_config,
     )?;
 
@@ -323,6 +339,7 @@ async fn start_hub(
         config: hub.clone(),
         realm_ca_cert: realm.realm_ca_cert.clone(),
         endpoint,
+        service_map_swap,
     })
 }
 
@@ -339,7 +356,7 @@ struct Server {
     /// Key: Consumer URI (CN) -> Inner Key: Connection ID -> Value: QUIC connection.
     consumer_connections: Arc<RwLock<HashMap<String, HashMap<usize, ConsumerEntry>>>>,
     /// A map for looking up the service name associated with a given endpoint URI (CN).
-    service_map: Arc<HashMap<String, ServiceInfo>>,
+    service_map: Arc<ArcSwap<HashMap<String, ServiceInfo>>>,
     /// Shared application configuration, used for features like on-demand start.
     shared_config: Arc<ArcSwap<crate::config::AppConfig>>,
 }
@@ -352,7 +369,7 @@ impl Server {
         endpoint: quinn::Endpoint,
         provider_connections: Arc<RwLock<HashMap<String, HashMap<usize, ProviderEntry>>>>,
         consumer_connections: Arc<RwLock<HashMap<String, HashMap<usize, ConsumerEntry>>>>,
-        service_map: Arc<HashMap<String, ServiceInfo>>,
+        service_map: Arc<ArcSwap<HashMap<String, ServiceInfo>>>,
         shared_config: Arc<ArcSwap<crate::config::AppConfig>>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         info!("Listening on {} (Realm: {}, Hub: {})", endpoint.local_addr()?, realm_name, hub_name);
@@ -547,7 +564,7 @@ impl Server {
         hub_name: &str,
         providers: &Arc<RwLock<HashMap<String, HashMap<usize, ProviderEntry>>>>,
         consumers: &Arc<RwLock<HashMap<String, HashMap<usize, ConsumerEntry>>>>,
-        service_map: &Arc<HashMap<String, ServiceInfo>>,
+        service_map: &Arc<ArcSwap<HashMap<String, ServiceInfo>>>,
     ) {
         // 1. Create snapshots to minimize lock duration
         let (provider_snapshot, consumer_snapshot, provider_count, consumer_count) = {
@@ -617,7 +634,8 @@ impl Server {
 
         for (uri, conn) in consumer_snapshot {
             let stats = conn.stats();
-            let service = service_map.get(&uri).map(|s| s.name.as_str()).unwrap_or("unknown");
+            let service_map_ref = service_map.load();
+            let service = service_map_ref.get(&uri).map(|s| s.name.as_str()).unwrap_or("unknown");
             info!(
                 type = "consumer",
                 realm = realm_name,
@@ -687,13 +705,14 @@ impl ProviderHandler {
         connection: quinn::Connection,
         cn: String,
         provider_connections: Arc<RwLock<HashMap<String, HashMap<usize, ProviderEntry>>>>,
-        service_map: Arc<HashMap<String, ServiceInfo>>,
+        service_map: Arc<ArcSwap<HashMap<String, ServiceInfo>>>,
         _shared_config: Arc<ArcSwap<crate::config::AppConfig>>,
     ) -> Self {
         let now = Utc::now();
         let conn_id = connection.stable_id();
         let service_info = service_map
-            .get(&cn)
+            .load() // Load the latest service map
+            .get(&cn) // Get from the loaded map
             .cloned()
             .unwrap_or_else(|| ServiceInfo {
                 name: "unknown".to_string(),
@@ -910,13 +929,14 @@ impl ConsumerHandler {
         hub_name: String,
         provider_connections: Arc<RwLock<HashMap<String, HashMap<usize, ProviderEntry>>>>,
         consumer_connections: Arc<RwLock<HashMap<String, HashMap<usize, ConsumerEntry>>>>,
-        service_map: Arc<HashMap<String, ServiceInfo>>,
+        service_map: Arc<ArcSwap<HashMap<String, ServiceInfo>>>,
         shared_config: Arc<ArcSwap<crate::config::AppConfig>>,
     ) -> Self {
         let now = Utc::now();
         let conn_id = connection.stable_id();
         let service_info = service_map
-            .get(&cn)
+            .load() // Load the latest service map
+            .get(&cn) // Get from the loaded map
             .cloned()
             .unwrap_or_else(|| ServiceInfo {
                 name: "unknown".to_string(),
