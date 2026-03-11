@@ -395,7 +395,7 @@ impl Server {
         loop {
             tokio::select! {
                 _ = stats_interval.tick() => {
-                    Self::report_stats(
+                    Self::update_provider_idle_and_report_connection_stats(
                         &self.realm_name,
                         &self.hub_name,
                         &self.provider_connections,
@@ -558,8 +558,8 @@ impl Server {
         info!("Shutdown complete (Realm: {}, Hub: {}).", self.realm_name, self.hub_name);
     }
 
-    /// Reports server statistics.
-    async fn report_stats(
+    /// Periodically updates provider idle status and reports statistics for all connections.
+    async fn update_provider_idle_and_report_connection_stats(
         realm_name: &str,
         hub_name: &str,
         providers: &Arc<RwLock<HashMap<String, HashMap<usize, ProviderEntry>>>>,
@@ -568,20 +568,52 @@ impl Server {
     ) {
         // 1. Create snapshots to minimize lock duration
         let (provider_snapshot, consumer_snapshot, provider_count, consumer_count) = {
+            // Use a read lock to avoid blocking consumers searching for a provider.
+            // The idle_since field has its own internal lock for updates.
             let providers_lock = providers.read().await;
             let consumers_lock = consumers.read().await;
 
             let provider_count: usize = providers_lock.values().map(|v| v.len()).sum();
             let consumer_count: usize = consumers_lock.values().map(|v| v.len()).sum();
 
-            let provider_snapshot: Vec<_> = providers_lock
-                .iter()
-                .flat_map(|(service, map)| {
-                    map.values().map(|entry| {
-                        (service.clone(), entry.uri.clone(), entry.connection.clone(), entry.status.clone())
-                    })
-                })
-                .collect();
+            let mut provider_snapshot = Vec::with_capacity(provider_count);
+            for (service, map) in providers_lock.iter() {
+                for entry in map.values() {
+                    let opened = entry.total_opened_streams.load(Ordering::Relaxed);
+                    let closed = entry.total_closed_streams.load(Ordering::Relaxed);
+
+                    // Atomically update and read the idle status.
+                    // This uses a fine-grained lock on the field, allowing concurrent reads
+                    // on the main provider map.
+                    let current_idle_since = {
+                        if opened > closed {
+                            // Provider is active, ensure idle_since is None.
+                            let mut idle_since = entry.idle_since.write().await;
+                            if idle_since.is_some() {
+                                *idle_since = None;
+                            }
+                            *idle_since
+                        } else {
+                            // Provider is idle, set timestamp if not already set.
+                            let mut idle_since = entry.idle_since.write().await;
+                            if idle_since.is_none() {
+                                *idle_since = Some(Utc::now());
+                            }
+                            *idle_since
+                        }
+                    };
+
+                    provider_snapshot.push((
+                        service.clone(),
+                        entry.uri.clone(),
+                        entry.connection.clone(),
+                        entry.status.clone(),
+                        opened,
+                        closed,
+                        current_idle_since,
+                    ));
+                }
+            }
 
             let consumer_snapshot: Vec<_> = consumers_lock
                 .iter()
@@ -616,8 +648,15 @@ impl Server {
         );
 
         // 2. Log stats outside the lock
-        for (service, cn, conn, status) in provider_snapshot {
+        for (service, cn, conn, status, opened, closed, idle_since) in provider_snapshot {
             let stats = conn.stats();
+            let active_streams = opened.saturating_sub(closed);
+            let idle_status = if let Some(since) = idle_since {
+                format!("idle for {}s", (Utc::now() - since).num_seconds())
+            } else {
+                "active".to_string()
+            };
+
             info!(
                 type = "provider",
                 realm = realm_name,
@@ -626,6 +665,8 @@ impl Server {
                 cn,
                 id = conn.stable_id(),
                 status = ?status,
+                active_streams,
+                idle_status,
                 rtt_ms = stats.path.rtt.as_millis(),
                 lost_packets = stats.path.lost_packets,
                 " -Provider"
@@ -662,7 +703,8 @@ struct ConnectionContext {
     endpoint_type: String,
     service: String,
     service_urn: String,
-    stream_count: Arc<AtomicUsize>,
+    total_opened_streams: Arc<AtomicUsize>,
+    total_closed_streams: Arc<AtomicUsize>,
 }
 
 /// Represents the operational status of a provider.
@@ -681,9 +723,13 @@ enum ProviderStatus {
 struct ProviderEntry {
     connection: quinn::Connection,
     status: ProviderStatus,
-    stream_count: Arc<AtomicUsize>,
+    total_opened_streams: Arc<AtomicUsize>,
+    total_closed_streams: Arc<AtomicUsize>,
     uri: String,
     created_at: DateTime<Utc>,
+    /// Records the timestamp when the provider became idle (no active streams).
+    /// `None` if the provider is currently active.
+    idle_since: Arc<RwLock<Option<DateTime<Utc>>>>,
 }
 
 /// Stores the consumer's connection.
@@ -744,7 +790,8 @@ impl ProviderHandler {
             endpoint_type: endpoint_type.clone(),
             service: service_info.name.clone(),
             service_urn: service_info.urn.clone(),
-            stream_count: Arc::new(AtomicUsize::new(0)),
+            total_opened_streams: Arc::new(AtomicUsize::new(0)),
+            total_closed_streams: Arc::new(AtomicUsize::new(0)),
         };
         info!(
             eventType = "startSpnSession",
@@ -818,9 +865,12 @@ impl ProviderHandler {
             let entry = ProviderEntry {
                 connection: self.context.connection.clone(),
                 status: status.clone(),
-                stream_count: self.context.stream_count.clone(),
+                total_opened_streams: self.context.total_opened_streams.clone(),
+                total_closed_streams: self.context.total_closed_streams.clone(),
                 uri: self.context.uri.clone(),
                 created_at: self.context.start_at,
+                // A new provider starts with 0 streams, so it is considered idle from the start.
+                idle_since: Arc::new(RwLock::new(Some(self.context.start_at))),
             };
             service_map.insert(self.context.connection_id, entry);
 
@@ -901,7 +951,7 @@ impl ProviderHandler {
 /// Consumers initiate bidirectional streams to request data from providers.
 struct ConsumerHandler {
     context: ConnectionContext,
-    target_provider: Option<(quinn::Connection, Arc<AtomicUsize>)>,
+    target_provider: Option<(quinn::Connection, Arc<AtomicUsize>, Arc<AtomicUsize>)>,
     provider_connections: Arc<RwLock<HashMap<String, HashMap<usize, ProviderEntry>>>>,
     consumer_connections: Arc<RwLock<HashMap<String, HashMap<usize, ConsumerEntry>>>>,
     /// Provider URN
@@ -951,7 +1001,8 @@ impl ConsumerHandler {
             endpoint_type: endpoint_type.clone(),
             service: service_info.name.clone(),
             service_urn: service_info.urn.clone(),
-            stream_count: Arc::new(AtomicUsize::new(0)),
+            total_opened_streams: Arc::new(AtomicUsize::new(0)),
+            total_closed_streams: Arc::new(AtomicUsize::new(0)),
         };
         info!(
             eventType = "startSpnSession",
@@ -1084,13 +1135,14 @@ impl ConsumerHandler {
             let found_active = {
                 let providers = self.provider_connections.read().await;
                 providers.get(&self.context.service)
-                    .and_then(|map| map.values().find(|e| e.status == ProviderStatus::Active))
-                    .map(|e| (e.uri.clone(), e.connection.clone(), e.stream_count.clone()))
+                    .and_then(|map| map.values().find(|e| e.status == ProviderStatus::Active)).map(|e| {
+                        (e.uri.clone(), e.connection.clone(), e.total_opened_streams.clone(), e.total_closed_streams.clone())
+                    })
             };
 
-            if let Some((cn, conn, count)) = found_active {
+            if let Some((cn, conn, opened, closed)) = found_active {
                 info!("Found matching provider '{}' for service '{}'.", cn, self.context.service);
-                self.target_provider = Some((conn, count));
+                self.target_provider = Some((conn, opened, closed));
                 return;
             }
 
@@ -1101,7 +1153,7 @@ impl ConsumerHandler {
 
                 // Double check Active (race condition)
                 if let Some(active) = service_map.values().find(|e| e.status == ProviderStatus::Active) {
-                     Some((active.uri.clone(), active.connection.clone(), active.stream_count.clone()))
+                     Some((active.uri.clone(), active.connection.clone(), active.total_opened_streams.clone(), active.total_closed_streams.clone()))
                 } else {
                     // Find a StandBy provider to promote
                     let standby_key = service_map.iter()
@@ -1113,7 +1165,7 @@ impl ConsumerHandler {
                         if let Some(entry) = service_map.get_mut(&key) {
                             entry.status = ProviderStatus::Active;
                             info!("Promoted provider '{}' to Active for service '{}'", entry.uri, self.context.service);
-                            Some((entry.uri.clone(), entry.connection.clone(), entry.stream_count.clone()))
+                            Some((entry.uri.clone(), entry.connection.clone(), entry.total_opened_streams.clone(), entry.total_closed_streams.clone()))
                         } else { None }
                     } else {
                         None
@@ -1121,8 +1173,8 @@ impl ConsumerHandler {
                 }
             };
 
-            if let Some((_, conn, count)) = promoted {
-                self.target_provider = Some((conn, count));
+            if let Some((_, conn, opened, closed)) = promoted {
+                self.target_provider = Some((conn, opened, closed));
                 return;
             }
 
@@ -1163,7 +1215,8 @@ impl ConsumerHandler {
     async fn proxy_streams_with_provider(
         &mut self,
         provider_conn: quinn::Connection,
-        provider_stream_count: Arc<AtomicUsize>,
+        total_opened_streams: Arc<AtomicUsize>,
+        total_closed_streams: Arc<AtomicUsize>,
     ) -> ProxyLoopResult {
         /// Internal enum to distinguish between different kinds of stream proxy errors,
         /// allowing the loop to decide how to react.
@@ -1217,11 +1270,12 @@ impl ConsumerHandler {
                                 self.first_stream_accepted = true;
                             }
                             info!("Bidirectional stream accepted from consumer '{}'", self.context.uri);
-                            self.context.stream_count.fetch_add(1, Ordering::Relaxed);
+                            self.context.total_opened_streams.fetch_add(1, Ordering::Relaxed);
                             let consumer_context = self.context.clone();
                             let tx_clone = error_tx.clone();
                             let provider_conn_clone = provider_conn.clone();
-                            let provider_stream_count_clone = provider_stream_count.clone();
+                            let total_opened_streams_clone = total_opened_streams.clone();
+                            let total_closed_streams_clone = total_closed_streams.clone();
                             tokio::spawn(async move {
                                 let stream_id = recv.id();
                                 let connection_id = consumer_context.connection_id;
@@ -1230,7 +1284,8 @@ impl ConsumerHandler {
                                     send,
                                     recv,
                                     provider_conn_clone,
-                                    provider_stream_count_clone,
+                                    total_opened_streams_clone,
+                                    total_closed_streams_clone,
                                     consumer_context,
                                 )
                                 .instrument(info_span!(
@@ -1304,7 +1359,7 @@ impl ConsumerHandler {
             self.find_and_set_target_provider(search_interval, search_timeout)
                 .await;
 
-            let (provider_conn, provider_stream_count) = match self.target_provider.clone() {
+            let (provider_conn, total_opened_streams, total_closed_streams) = match self.target_provider.clone() {
                 Some(val) => val,
                 None => {
                     warn!(
@@ -1322,7 +1377,7 @@ impl ConsumerHandler {
             };
 
             // 2. Start proxying streams with the found provider.
-            match self.proxy_streams_with_provider(provider_conn, provider_stream_count).await {
+            match self.proxy_streams_with_provider(provider_conn, total_opened_streams, total_closed_streams).await {
                 ProxyLoopResult::ProviderError => {
                     // A recoverable provider error occurred, loop again to find a new one.
                     // Brief pause to avoid busy loop if the broken provider is not yet removed from the map.
@@ -1365,7 +1420,8 @@ async fn proxy_consumer_stream_to_provider(
     mut consumer_send: quinn::SendStream,
     mut consumer_recv: quinn::RecvStream,
     provider_conn: quinn::Connection,
-    provider_stream_count: Arc<AtomicUsize>,
+    total_opened_streams: Arc<AtomicUsize>,
+    total_closed_streams: Arc<AtomicUsize>,
     consumer_context: ConnectionContext,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     //let stream_id = consumer_recv.id();
@@ -1376,7 +1432,7 @@ async fn proxy_consumer_stream_to_provider(
     // Provider-side identifiers
     let provider_connection_id = provider_conn.stable_id();
     let (mut provider_send, mut provider_recv) = provider_conn.open_bi().await?;
-    provider_stream_count.fetch_add(1, Ordering::Relaxed);
+    total_opened_streams.fetch_add(1, Ordering::Relaxed);
     let provider_stream_id = provider_send.id();
     let spn_connection_id = format!("{}-{}", consumer_stream_id, provider_stream_id);
     let start_at = Utc::now();
@@ -1404,6 +1460,9 @@ async fn proxy_consumer_stream_to_provider(
 
     let result = tokio::try_join!(consumer_to_provider, provider_to_consumer);
     let duration = Utc::now() - start_at;
+
+    // When the stream is done, regardless of the outcome, increment the closed stream count.
+    total_closed_streams.fetch_add(1, Ordering::Relaxed);
 
     match result {
         Ok((bytes_c2p, bytes_p2c)) => {
@@ -1505,7 +1564,7 @@ fn log_connection_close(
     }
 
     let duration = Utc::now() - context.start_at;
-    let total_connections = context.stream_count.load(Ordering::Relaxed);
+    let total_connections = context.total_opened_streams.load(Ordering::Relaxed);
     let terminate_reason = map_reason_to_string(reason);
 
     info!(
