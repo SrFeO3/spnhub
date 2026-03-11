@@ -1414,6 +1414,17 @@ impl ConsumerHandler {
     }
 }
 
+/// RAII guard to ensure the provider's closed stream count is always incremented.
+struct ProviderStreamCounterGuard {
+    counter: Arc<AtomicUsize>,
+}
+
+impl Drop for ProviderStreamCounterGuard {
+    fn drop(&mut self) {
+        self.counter.fetch_add(1, Ordering::Relaxed);
+    }
+}
+
 /// Forwards data between a consumer's stream and a new stream opened to a provider.
 /// This function acts as a proxy for a single request/response interaction.
 async fn proxy_consumer_stream_to_provider(
@@ -1432,8 +1443,12 @@ async fn proxy_consumer_stream_to_provider(
     // Provider-side identifiers
     let provider_connection_id = provider_conn.stable_id();
     let (mut provider_send, mut provider_recv) = provider_conn.open_bi().await?;
-    total_opened_streams.fetch_add(1, Ordering::Relaxed);
     let provider_stream_id = provider_send.id();
+
+    // Increment open stream count and ensure close count is incremented on scope exit.
+    total_opened_streams.fetch_add(1, Ordering::Relaxed);
+    let _closed_stream_guard = ProviderStreamCounterGuard { counter: total_closed_streams };
+
     let spn_connection_id = format!("{}-{}", consumer_stream_id, provider_stream_id);
     let start_at = Utc::now();
 
@@ -1460,9 +1475,6 @@ async fn proxy_consumer_stream_to_provider(
 
     let result = tokio::try_join!(consumer_to_provider, provider_to_consumer);
     let duration = Utc::now() - start_at;
-
-    // When the stream is done, regardless of the outcome, increment the closed stream count.
-    total_closed_streams.fetch_add(1, Ordering::Relaxed);
 
     match result {
         Ok((bytes_c2p, bytes_p2c)) => {
