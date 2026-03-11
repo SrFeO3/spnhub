@@ -1,39 +1,31 @@
 //! # Configuration Management
 //!
-//! This module is responsible for defining, loading, and managing the application's
-//! configuration. It includes data structures that map directly to the `config.yaml` file,
-//! and logic for hot-reloading configurations without service interruption.
+//! This module defines the data structures for the application's configuration
+//! and handles loading it from a local file or a remote multi-endpoint API.
+//! It also supports hot-reloading the configuration without service interruption.
 //!
 //! ## Key Components
 //!
-//! - **`AppConfig` and related structs**: These are `serde`-deserializable structures
-//!   that represent the hierarchy of the `config.yaml` file.
+//! - **`AppConfig` and related structs**: `serde`-deserializable structures that
+//!   mirror the configuration file's hierarchy.
 //!
-//! - **`ConfigHotReloadService`**: A background service that monitors `config.yaml` for changes
-//!   and applies them to the running application without downtime. It uses `ArcSwap` to
-//!   atomically update shared configuration data.
-//!
-//! - **Caches and Registries (`UpstreamCache`, `CertificateCache`, `AuthScopeRegistry`, `JwtKeysCache`)**:
-//!   These components hold processed, ready-to-use data derived from the main configuration.
-//!   They are designed to be hot-reloaded and are managed by the `ConfigHotReloadService`.
+//! - **`ConfigHotReloadService`**: A service that monitors the configuration source for changes.
 //!
 //! ## Hot-Reloading and Idempotency
 //!
-//! The hot-reloading mechanism is designed to be idempotent and minimally disruptive:
-//! - **JWT Keys, Certificates, and Upstreams**: When the configuration changes, only the
-//!   items that have been added, modified, or removed are updated. Unchanged items are
-//!   left as-is.
-//! - **Authentication Scopes**: The `AuthScopeRegistry` performs a differential update.
-//!   It adds new scopes and removes obsolete ones, but crucially, it does **not** touch
-//!   existing, unchanged scopes. This ensures that active user sessions within those
-//!   scopes are preserved across configuration reloads.
+//! The hot-reloading process is designed for safety and consistency:
+//! - **Atomic Updates**: A new configuration is fully loaded and parsed in the background.
+//!   It is only applied by atomically swapping it into place, preventing partial states.
+//! - **Failure Resilience**: If fetching or parsing fails, the operation is aborted, and the
+//!   hub continues to run with the last known-good configuration.
+//! - **Idempotency**: Applying the configuration is idempotent; unchanged services are not
+//!   disrupted.
 
 use std::collections::HashMap;
 use std::sync::Arc;
 
 use arc_swap::ArcSwap;
 use serde::{Deserialize, Serialize};
-use futures::future::{join_all};
 use serde_json;
 use tracing::{info, warn, debug, error};
 use tokio::sync::Mutex;
@@ -120,43 +112,50 @@ impl ConfigHotReloadService {
         }
     }
 
+    /// Checks for configuration changes and reloads if necessary.
     pub async fn check_and_reload(&self) -> Option<AppConfig> {
-        let (new_config, current_content) = if self.config_path.starts_with("http://") || self.config_path.starts_with("https://") {
-            match fetch_config_from_url(&self.config_path).await {
-                Ok(res) => res,
-                Err(e) => {
-                    warn!("Failed to fetch configuration from '{}': {}", self.config_path, e);
-                    return None;
-                }
-            }
-        } else {
-            let content = match tokio::fs::read_to_string(&self.config_path).await {
-                Ok(content) => content,
-                Err(e) => {
-                    warn!("Failed to read configuration file '{}': {}", self.config_path, e);
-                    return None;
-                }
-            };
-
-            match serde_yaml::from_str::<AppConfig>(&content) {
-                Ok(config) => (config, content),
-                Err(e) => {
-                    warn!("Failed to parse reloaded configuration '{}': {}", self.config_path, e);
-                    return None;
-                }
+        let current_content = match get_config_content(&self.config_path).await {
+            Ok(content) => content,
+            Err(e) => {
+                warn!("Failed to get configuration content from '{}' for reload: {}", self.config_path, e);
+                return None;
             }
         };
-
-        info!("[Debug] Fetched configuration for reload check:");
-        for realm in &new_config.realms {
-            debug!("[Debug] - Realm: '{}', disabled: {}", realm.realm_name, realm.disabled);
-        }
 
         let mut last_content = self.last_known_content.lock().await;
 
         if *last_content == current_content {
             info!("Hot reload signal received. No configuration change detected.");
             return None;
+        }
+
+        let new_config = match serde_yaml::from_str::<AppConfig>(&current_content) {
+            Ok(config) => config,
+            Err(e) => {
+                if let Some(location) = e.location() {
+                    warn!(
+                        eventType = "configParseError",
+                        path = %self.config_path,
+                        line = location.line(),
+                        column = location.column(),
+                        error = %e,
+                        "Failed to parse reloaded configuration."
+                    );
+                } else {
+                    warn!(
+                        eventType = "configParseError",
+                        path = %self.config_path,
+                        error = %e,
+                        "Failed to parse reloaded configuration."
+                    );
+                }
+                return None;
+            }
+        };
+
+        info!("[Debug] Fetched configuration for reload check:");
+        for realm in &new_config.realms {
+            debug!("[Debug] - Realm: '{}', disabled: {}", realm.realm_name, realm.disabled);
         }
 
         if !last_content.is_empty() {
@@ -172,23 +171,51 @@ impl ConfigHotReloadService {
     }
 }
 
-/// Loads the initial configuration
-pub async fn load_initial_config(path: &str) -> Result<(AppConfig, String), Box<dyn std::error::Error + Send + Sync>> {
-    if path.starts_with("http://") || path.starts_with("https://") {
-        info!("Loading configuration from repository: {}", path);
-        match fetch_config_from_url(path).await {
-            Ok(res) => return Ok(res),
-            Err(e) => {
-                warn!("Failed to fetch configuration from repository: {}. Falling back to local file.", e);
+/// Loads the initial configuration from the specified path (URL or file).
+pub async fn load_initial_config(path: &str) -> Result<(AppConfig, String), Box<dyn std::error::Error + Send + Sync>> {    let content = get_config_content(path).await?;
+    let config = match serde_yaml::from_str::<AppConfig>(&content) {
+        Ok(config) => config,
+        Err(e) => {
+            if let Some(location) = e.location() {
+                error!(
+                    eventType = "configParseError",
+                    file = path,
+                    line = location.line(),
+                    column = location.column(),
+                    error = %e,
+                    "Failed to parse initial configuration file."
+                );
+            } else {
+                error!(
+                    eventType = "configParseError",
+                    file = path,
+                    error = %e,
+                    "Failed to parse initial configuration file."
+                );
             }
+            return Err(format!("Failed to parse configuration file '{}': {}", path, e).into());
         }
-    }
-    info!("Loading configuration from file: {}", path);
-    let content = tokio::fs::read_to_string(path).await
-        .map_err(|e| format!("Failed to read configuration file '{}': {}", path, e))?;
-    let config = serde_yaml::from_str(&content)
-        .map_err(|e| format!("Failed to parse configuration file '{}': {}", path, e))?;
+    };
     Ok((config, content))
+}
+
+/// Fetches or reads the configuration content from a given path (URL or file).
+async fn get_config_content(path: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    if path.starts_with("http://") || path.starts_with("https://") {
+        info!("Fetching configuration content from URL: {}", path);
+        fetch_config_from_url(path).await.map(|(_config, content)| content)
+    } else if let Some(file_path) = path.strip_prefix("file://") {
+        info!("Reading configuration content from file: {}", file_path);
+        tokio::fs::read_to_string(file_path)
+            .await
+            .map_err(|e| format!("Failed to read file '{}': {}", file_path, e).into())
+    } else {
+        // Treat as a local file path for backward compatibility if no scheme is present.
+        info!("Reading configuration content from local path: {}", path);
+        tokio::fs::read_to_string(path)
+            .await
+            .map_err(|e| format!("Failed to read file '{}': {}", path, e).into())
+    }
 }
 
 // --- API Fetching Logic ---
@@ -210,6 +237,17 @@ struct ApiRealm {
     disabled: bool,
 }
 
+impl ApiRealm {
+    fn into_config(self, hubs: Vec<HubConfig>) -> RealmConfig {
+        RealmConfig {
+            realm_name: self.name,
+            realm_ca_cert: self.cacert,
+            disabled: self.disabled,
+            hubs,
+        }
+    }
+}
+
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 struct ApiHub {
@@ -226,6 +264,22 @@ struct ApiHub {
     server_port: Option<u16>,
 }
 
+impl ApiHub {
+    fn into_config(self, services: Vec<ServiceConfig>) -> HubConfig {
+        HubConfig {
+            name: self.name,
+            _title: self.title,
+            _description: self.description.unwrap_or_default(),
+            _fqdn: self.fqdn,
+            server_address: self.server_address.unwrap_or_else(|| "0.0.0.0".to_string()),
+            server_port: self.server_port.unwrap_or(4433),
+            server_cert: self.server_cert,
+            server_cert_key: self.server_cert_key,
+            services,
+        }
+    }
+}
+
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 struct ApiService {
@@ -237,6 +291,21 @@ struct ApiService {
     consumers: Vec<String>,
     singleton: Option<bool>,
     availability_management: Option<ApiAvailabilityManagement>,
+}
+
+impl From<ApiService> for ServiceConfig {
+    fn from(api: ApiService) -> Self {
+        ServiceConfig {
+            name: api.name,
+            urn: api.urn,
+            _title: api.title,
+            _description: api.description.unwrap_or_default(),
+            provider: api.provider,
+            consumers: api.consumers,
+            _singleton: api.singleton.unwrap_or(false),
+            availability_management: api.availability_management.unwrap_or_default().into(),
+        }
+    }
 }
 
 #[derive(Deserialize, Debug)]
@@ -261,6 +330,44 @@ struct ApiAvailabilityManagement {
     mount_points: Option<Vec<ApiMountPoint>>,
 }
 
+impl Default for ApiAvailabilityManagement {
+    fn default() -> Self {
+        Self {
+            service_id: String::new(),
+            cluster_manager_urn: String::new(),
+            description: None,
+            start_at: None,
+            stop_at: None,
+            ondemand_start_on_consumer: None,
+            ondemand_start_on_payload: None,
+            idle_timeout: None,
+            image: None,
+            command: None,
+            options: None,
+            env: None,
+            mount_points: None,
+        }
+    }
+}
+
+impl From<ApiAvailabilityManagement> for AvailabilityManagementConfig {
+    fn from(api: ApiAvailabilityManagement) -> Self {
+        AvailabilityManagementConfig {
+            service_id: api.service_id,
+            _cluster_manager_urn: Some(api.cluster_manager_urn),
+            _start_at: api.start_at,
+            _stop_at: api.stop_at,
+            ondemand_start_on_consumer: api.ondemand_start_on_consumer.unwrap_or(false),
+            ondemand_start_on_payload: api.ondemand_start_on_payload.unwrap_or(false),
+            idle_timeout: api.idle_timeout.unwrap_or(0).max(0) as u64,
+            image: api.image.unwrap_or_default(),
+            command: api.command,
+            env: api.env,
+            options: api.options,
+        }
+    }
+}
+
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 struct ApiMountPoint {
@@ -282,7 +389,15 @@ async fn fetch_config_from_url(url: &str) -> Result<(AppConfig, String), Box<dyn
             return Err(format!("API error for {}: status {}" , url, status).into());
         }
         serde_json::from_str::<T>(&body_text).map_err(|e| {
-            error!("Failed to deserialize JSON from {}: {}. Body: '{}'", url, e, &body_text);
+            error!(
+                eventType = "jsonDeserializeError",
+                url = url,
+                line = e.line(),
+                column = e.column(),
+                error = %e,
+                body = %body_text,
+                "Failed to deserialize JSON"
+            );
             format!("JSON deserialize error for {}: {}", url, e).into()
         })
     }
@@ -292,79 +407,23 @@ async fn fetch_config_from_url(url: &str) -> Result<(AppConfig, String), Box<dyn
     let realms_url = format!("{}/realms", base_url);
     let api_realms: Vec<ApiRealm> = fetch_and_deserialize(&client, &realms_url).await?;
 
-    let mut realms = Vec::new();
-
+    let mut realm_configs = Vec::new();
     for api_realm in api_realms {
         let hubs_url = format!("{}/realms/{}/hubs", base_url, api_realm.name);
         let api_hubs: Vec<ApiHub> = fetch_and_deserialize(&client, &hubs_url).await?;
 
-        let hub_tasks = api_hubs.into_iter().map(|api_hub| {
-            let client = client.clone();
-            let realm_name = api_realm.name.clone();
-            let url = base_url.to_string();
-            async move {
-                let services_url = format!("{}/realms/{}/hubs/{}/services", url, realm_name, api_hub.name);
-                let api_services: Vec<ApiService> = fetch_and_deserialize(&client, &services_url).await?;
+        let mut hub_configs = Vec::new();
+        for api_hub in api_hubs {
+            let services_url = format!("{}/realms/{}/hubs/{}/services", base_url, api_realm.name, api_hub.name);
+            let api_services: Vec<ApiService> = fetch_and_deserialize(&client, &services_url).await?;
+            let services = api_services.into_iter().map(ServiceConfig::from).collect();
+            hub_configs.push(api_hub.into_config(services));
+        }
 
-                let services = api_services.into_iter().map(|s| {
-                    let am = s.availability_management.unwrap_or_else(|| ApiAvailabilityManagement {
-                        service_id: "".to_string(), cluster_manager_urn: "".to_string(), description: None, start_at: None, stop_at: None, ondemand_start_on_consumer: None, ondemand_start_on_payload: None, idle_timeout: None, image: None, command: None, options: None, env: None, mount_points: None
-                   });
-
-                    ServiceConfig {
-                        name: s.name,
-                        urn: s.urn,
-                        _title: s.title,
-                        _description: s.description.unwrap_or_default(),
-                        provider: s.provider,
-                        consumers: s.consumers,
-                        _singleton: s.singleton.unwrap_or(false),
-                        availability_management: AvailabilityManagementConfig {
-                            service_id: am.service_id,
-                            _cluster_manager_urn: Some(am.cluster_manager_urn),
-                            _start_at: am.start_at,
-                            _stop_at: am.stop_at,
-                            ondemand_start_on_consumer: am.ondemand_start_on_consumer.unwrap_or(false),
-                            ondemand_start_on_payload: am.ondemand_start_on_payload.unwrap_or(false),
-                            idle_timeout: am.idle_timeout.unwrap_or(0).max(0) as u64,
-                            image: am.image.unwrap_or_default(),
-                            command: am.command,
-                            env: am.env,
-                            options: am.options,
-                        }
-                    }
-                }).collect();
-
-                let result: Result<HubConfig, Box<dyn std::error::Error + Send + Sync>> = Ok(HubConfig {
-                    name: api_hub.name,
-                    _title: api_hub.title,
-                    _description: api_hub.description.unwrap_or_default(),
-                    _fqdn: api_hub.fqdn,
-                    server_address: api_hub.server_address.unwrap_or("0.0.0.0".to_string()),
-                    server_port: api_hub.server_port.unwrap_or(4433),
-                    server_cert: api_hub.server_cert,
-                    server_cert_key: api_hub.server_cert_key,
-                    services,
-                });
-                result
-            }
-        });
-
-        let hubs: Vec<HubConfig> = join_all(hub_tasks)
-            .await
-            .into_iter()
-            .collect::<Result<Vec<_>, Box<dyn std::error::Error + Send + Sync>>>()?;
-
-
-        realms.push(RealmConfig {
-            realm_name: api_realm.name,
-            realm_ca_cert: api_realm.cacert,
-            disabled: api_realm.disabled,
-            hubs,
-        });
+        realm_configs.push(api_realm.into_config(hub_configs));
     }
 
-    let config = AppConfig { realms };
+    let config = AppConfig { realms: realm_configs };
     // Serialize to YAML to use as "content" for change detection
     let content = serde_yaml::to_string(&config)?;
     Ok((config, content))
