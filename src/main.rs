@@ -1167,6 +1167,7 @@ impl ConsumerHandler {
     /// Finds a provider with the same service and sets it as the target,
     /// retrying periodically until one is found or the timeout is reached.
     async fn find_and_set_target_provider(&mut self, interval: Duration, timeout: Duration) {
+        self.target_provider = None;
         let start_time = Instant::now();
         info!(
             "Searching for provider for service '{}' (timeout: {:?}, interval: {:?})",
@@ -1176,12 +1177,23 @@ impl ConsumerHandler {
 
         loop {
             // 1. Try to find an Active provider (Read Lock)
-            let found_active = {
+            // Also check if there are any StandBy providers to avoid unnecessary write locks.
+            let (found_active, has_standby) = {
                 let providers = self.provider_connections.read().await;
-                providers.get(&self.context.service)
-                    .and_then(|map| map.values().find(|e| e.status == ProviderStatus::Active)).map(|e| {
-                        (e.uri.clone(), e.connection.clone(), e.total_opened_streams.clone(), e.total_closed_streams.clone())
-                    })
+                if let Some(map) = providers.get(&self.context.service) {
+                    let active = map.values().find(|e| e.status == ProviderStatus::Active).map(|e| {
+                        (
+                            e.uri.clone(),
+                            e.connection.clone(),
+                            e.total_opened_streams.clone(),
+                            e.total_closed_streams.clone(),
+                        )
+                    });
+                    let standby = map.values().any(|e| e.status == ProviderStatus::StandBy);
+                    (active, standby)
+                } else {
+                    (None, false)
+                }
             };
 
             if let Some((cn, conn, opened, closed)) = found_active {
@@ -1191,7 +1203,7 @@ impl ConsumerHandler {
             }
 
             // 2. If no Active found, try to promote a StandBy provider (Write Lock)
-            let promoted = {
+            let promoted = if has_standby {
                 let mut providers = self.provider_connections.write().await;
                 let service_map = providers.entry(self.context.service.clone()).or_default();
 
@@ -1215,6 +1227,8 @@ impl ConsumerHandler {
                         None
                     }
                 }
+            } else {
+                None
             };
 
             if let Some((_, conn, opened, closed)) = promoted {
