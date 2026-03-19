@@ -50,6 +50,8 @@ const ERROR_CHANNEL_CAPACITY: usize = 32;
 const CONSUMER_PROVIDER_RETRY_DELAY: Duration = Duration::from_millis(500);
 /// The polling interval to check if all connections are drained during a graceful shutdown.
 const GRACEFUL_SHUTDOWN_POLL_INTERVAL: Duration = Duration::from_millis(500);
+/// The minimum interval between on-demand start requests from the same consumer to prevent abuse.
+const ONDEMAND_SERVICE_START_RATE_LIMIT_PER_CONSUMER: Duration = Duration::from_secs(10);
 /// The maximum time to wait for connections to drain during a graceful shutdown.
 const GRACEFUL_SHUTDOWN_DRAIN_TIMEOUT: Duration = Duration::from_secs(30);
 
@@ -1145,6 +1147,9 @@ impl ConsumerHandler {
         let consumer_uri = self.context.uri.clone();
 
         tokio::spawn(async move {
+            // Tracks the timestamp of the last processed "request_provider_start" signal from this specific connection.
+            let mut last_ondemand_service_start_request_at: Option<Instant> = None;
+
             // Wait for datagrams (signals) from the consumer in a loop
             while let Ok(bytes) = datagram_conn.read_datagram().await {
                 let message = String::from_utf8_lossy(&bytes);
@@ -1153,6 +1158,22 @@ impl ConsumerHandler {
                 match message.trim() {
                     "request_provider_start" => {
                         if let (Some(urn), Some(am_config)) = (&provider_urn, &availability_config) {
+                            // -- Rate limit logic to prevent abuse --
+                            let now = Instant::now();
+
+                            if let Some(last) = last_ondemand_service_start_request_at {
+                                if now.duration_since(last) < ONDEMAND_SERVICE_START_RATE_LIMIT_PER_CONSUMER {
+                                    warn!(
+                                        service = %service_name,
+                                        consumer = %consumer_uri,
+                                        "On-demand start request ignored due to rate limiting (per-connection)."
+                                    );
+                                    continue;
+                                }
+                            }
+                            last_ondemand_service_start_request_at = Some(now);
+                            // --- End rate limit logic ---
+
                             let urn = urn.clone();
                             let am_config = am_config.clone();
                             let service_name = service_name.clone();
