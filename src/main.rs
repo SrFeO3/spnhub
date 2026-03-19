@@ -1506,14 +1506,24 @@ async fn proxy_consumer_stream_to_provider(
 
     // Proxy data in both directions concurrently.
     let consumer_to_provider = async {
-        tokio::io::copy(&mut consumer_recv, &mut provider_send)
+        let bytes = tokio::io::copy(&mut consumer_recv, &mut provider_send)
             .await
-            .map_err(|e| (e, "Consumer->Provider"))
+            .map_err(|e| (e, "Consumer->Provider copy"))?;
+        provider_send.finish().map_err(|e| {
+            let io_err = std::io::Error::new(std::io::ErrorKind::Other, e);
+            (io_err, "Consumer->Provider finish")
+        })?;
+        Ok(bytes)
     };
     let provider_to_consumer = async {
-        tokio::io::copy(&mut provider_recv, &mut consumer_send)
+        let bytes = tokio::io::copy(&mut provider_recv, &mut consumer_send)
             .await
-            .map_err(|e| (e, "Provider->Consumer"))
+            .map_err(|e| (e, "Provider->Consumer copy"))?;
+        consumer_send.finish().map_err(|e| {
+            let io_err = std::io::Error::new(std::io::ErrorKind::Other, e);
+            (io_err, "Provider->Consumer finish")
+        })?;
+        Ok(bytes)
     };
 
     let result = tokio::try_join!(consumer_to_provider, provider_to_consumer);
