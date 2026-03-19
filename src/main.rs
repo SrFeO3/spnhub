@@ -13,7 +13,7 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicI64, AtomicUsize, Ordering};
 
 use arc_swap::ArcSwap;
 use chrono::{DateTime, Utc};
@@ -395,14 +395,23 @@ impl Server {
         loop {
             tokio::select! {
                 _ = stats_interval.tick() => {
-                    Self::update_provider_idle_and_report_connection_stats(
-                        &self.realm_name,
-                        &self.hub_name,
-                        &self.provider_connections,
-                        &self.consumer_connections,
-                        &self.service_map,
-                        &self.shared_config
-                    ).await;
+                    let realm_name = self.realm_name.clone();
+                    let hub_name = self.hub_name.clone();
+                    let providers = self.provider_connections.clone();
+                    let consumers = self.consumer_connections.clone();
+                    let service_map = self.service_map.clone();
+                    let shared_config = self.shared_config.clone();
+
+                    tokio::spawn(async move {
+                        Self::update_provider_idle_and_report_connection_stats(
+                            &realm_name,
+                            &hub_name,
+                            &providers,
+                            &consumers,
+                            &service_map,
+                            &shared_config
+                        ).await;
+                    });
                 }
                 Some(connecting) = self.endpoint.accept() => {
                     info!("Connection incoming from {}", connecting.remote_address());
@@ -569,43 +578,44 @@ impl Server {
         shared_config: &Arc<ArcSwap<AppConfig>>,
     ) {
         // 1. Create snapshots to minimize lock duration
-        let (provider_snapshot, consumer_snapshot, provider_count, consumer_count) = {
-            // Use a read lock to avoid blocking consumers searching for a provider.
-            // The idle_since field has its own internal lock for updates.
+
+        // Snapshot Providers
+        let (provider_snapshot, provider_count) = {
+            // Use a read lock on the map. The idle_since field is updated via atomics.
             let providers_lock = providers.read().await;
-            let consumers_lock = consumers.read().await;
-
             let provider_count: usize = providers_lock.values().map(|v| v.len()).sum();
-            let consumer_count: usize = consumers_lock.values().map(|v| v.len()).sum();
 
-            let mut provider_snapshot = Vec::with_capacity(provider_count);
+            let mut snapshot = Vec::with_capacity(provider_count);
             for (service, map) in providers_lock.iter() {
                 for entry in map.values() {
                     let opened = entry.total_opened_streams.load(Ordering::Relaxed);
                     let closed = entry.total_closed_streams.load(Ordering::Relaxed);
 
-                    // Atomically update and read the idle status.
-                    // This uses a fine-grained lock on the field, allowing concurrent reads
-                    // on the main provider map.
+                    // Atomically update and read the idle status using atomics to avoid locks.
                     let current_idle_since = {
                         if opened > closed {
-                            // Provider is active, ensure idle_since is None.
-                            let mut idle_since = entry.idle_since.write().await;
-                            if idle_since.is_some() {
-                                *idle_since = None;
-                            }
-                            *idle_since
+                            // Busy: clear state.
+                            entry.idle_since.store(0, Ordering::Relaxed);
+                            None
                         } else {
-                            // Provider is idle, set timestamp if not already set.
-                            let mut idle_since = entry.idle_since.write().await;
-                            if idle_since.is_none() {
-                                *idle_since = Some(Utc::now());
+                            // Idle: check for state changes.
+                            let stored_since = entry.idle_since.load(Ordering::Relaxed);
+                            let stored_opened = entry.streams_at_idle_start.load(Ordering::Relaxed);
+
+                            if stored_since != 0 && stored_opened == opened {
+                                // Continuously idle. Keep timestamp.
+                                DateTime::from_timestamp(stored_since, 0)
+                            } else {
+                                // State changed or was busy. Reset timer.
+                                let now = Utc::now().timestamp();
+                                entry.streams_at_idle_start.store(opened, Ordering::Relaxed);
+                                entry.idle_since.store(now, Ordering::Relaxed);
+                                DateTime::from_timestamp(now, 0)
                             }
-                            *idle_since
                         }
                     };
 
-                    provider_snapshot.push((
+                    snapshot.push((
                         service.clone(),
                         entry.uri.clone(),
                         entry.connection.clone(),
@@ -616,21 +626,22 @@ impl Server {
                     ));
                 }
             }
+            (snapshot, provider_count)
+        };
 
-            let consumer_snapshot: Vec<_> = consumers_lock
+        // Snapshot Consumers
+        let (consumer_snapshot, consumer_count) = {
+            let consumers_lock = consumers.read().await;
+            let consumer_count: usize = consumers_lock.values().map(|v| v.len()).sum();
+
+            let snapshot: Vec<_> = consumers_lock
                 .iter()
                 .flat_map(|(uri, conns)| {
                     conns.iter().map(move |(_id, entry)| (uri.clone(), entry.connection.clone()))
                 })
                 .collect();
-
-            (
-                provider_snapshot,
-                consumer_snapshot,
-                provider_count,
-                consumer_count,
-            )
-        }; // Locks are released here
+            (snapshot, consumer_count)
+        };
 
         // 2. Identify and stop idle providers
         let config = shared_config.load();
@@ -714,7 +725,7 @@ impl Server {
             let idle_status = if let Some(since) = idle_since {
                 format!("idle for {}s", (Utc::now() - since).num_seconds())
             } else {
-                "active".to_string()
+                "busy".to_string()
             };
 
             info!(
@@ -787,9 +798,10 @@ struct ProviderEntry {
     total_closed_streams: Arc<AtomicUsize>,
     uri: String,
     created_at: DateTime<Utc>,
-    /// Records the timestamp when the provider became idle (no active streams).
-    /// `None` if the provider is currently active.
-    idle_since: Arc<RwLock<Option<DateTime<Utc>>>>,
+    /// Timestamp (seconds since epoch) when the provider became idle. 0 if busy (processing streams).
+    idle_since: Arc<AtomicI64>,
+    /// The number of total opened streams when the provider became idle.
+    streams_at_idle_start: Arc<AtomicUsize>,
 }
 
 /// Stores the consumer's connection.
@@ -913,8 +925,9 @@ impl ProviderHandler {
                 total_closed_streams: self.context.total_closed_streams.clone(),
                 uri: self.context.uri.clone(),
                 created_at: self.context.start_at,
-                // A new provider starts with 0 streams, so it is considered idle from the start.
-                idle_since: Arc::new(RwLock::new(Some(self.context.start_at))),
+                // A new provider starts with 0 streams, so it is considered idle.
+                idle_since: Arc::new(AtomicI64::new(self.context.start_at.timestamp())),
+                streams_at_idle_start: Arc::new(AtomicUsize::new(0)),
             };
             service_map.insert(self.context.connection_id, entry);
 
