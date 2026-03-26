@@ -106,10 +106,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .with_current_span(false)
         .init();
 
-    info!("Server started");
-
-    // arg
     let args = Args::parse();
+
+    info!(
+        "SPN Hub Server started (Version: {}, PID: {}) with inventory configuration: {}",
+        env!("CARGO_PKG_VERSION"),
+        std::process::id(),
+        args.config
+    );
 
     // Load initial config
     let (initial_config, initial_content) = load_initial_config(&args.config).await?;
