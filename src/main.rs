@@ -667,11 +667,13 @@ impl Server {
                             let idle_duration = (Utc::now() - *since).num_seconds() as u64;
                             if idle_duration >= idle_timeout {
                                 info!(
-                                    eventType = "idleProviderStopping",
+                                    eventType = "autoLifecycleStopInitiated",
                                     service = service,
+                                    urn = service_config.urn,
+                                    image = am_config.image,
                                     idle_duration = idle_duration,
                                     idle_timeout = idle_timeout,
-                                    "Provider has been idle for too long. Initiating stop."
+                                    "Idle provider timeout reached. Initiating stop."
                                 );
 
                                 // Close the QUIC connection. This will trigger its removal from the map in its handler.
@@ -681,21 +683,24 @@ impl Server {
                                 // Spawn this so it doesn't block the stats reporting task.
                                 let am_config_clone = am_config.clone();
                                 let service_clone = service.clone();
+                                let urn_clone = service_config.urn.clone();
                                 tokio::spawn(async move {
                                     match microservice::stop_provider(&am_config_clone).await {
                                         Ok(_) => {
                                             info!(
-                                                eventType = "idleProviderStopped",
+                                                eventType = "autoLifecycleStopSuccess",
                                                 service = service_clone,
+                                                urn = urn_clone,
                                                 "Idle provider stopped successfully."
                                             );
                                         }
                                         Err(e) => {
                                             warn!(
-                                                eventType = "idleProviderStopFailed",
+                                                eventType = "autoLifecycleStopFailed",
                                                 service = service_clone,
+                                                urn = urn_clone,
                                                 error = %e,
-                                                "Failed to stop idle provider."
+                                                "Idle provider failed to stop."
                                             );
                                         }
                                     }
@@ -1121,19 +1126,43 @@ impl ConsumerHandler {
 
         if should_start {
             info!(
-                "Starting container for provider (trigger: {}, idle_timeout: {}s): {} (image: {})",
-                trigger, am_config.idle_timeout, urn, am_config.image
+                eventType = "autoLifecycleStartInitiated",
+                trigger = trigger,
+                service = service_name,
+                urn = urn,
+                image = am_config.image,
+                idle_timeout = am_config.idle_timeout,
+                "On-demand provider start initiated."
             );
-            if let Err(e) = crate::microservice::start_provider(am_config).await {
-                warn!(
-                    "Failed to attempt on-demand start for service '{}' (URN: {}): {}",
-                    service_name, urn, e
-                );
+            match crate::microservice::start_provider(am_config).await {
+                Ok(handle) => {
+                    info!(
+                        eventType = "autoLifecycleStartSuccess",
+                        trigger = trigger,
+                        service = service_name,
+                        urn = urn,
+                        id = handle.id,
+                        "On-demand provider started successfully."
+                    );
+                }
+                Err(e) => {
+                    warn!(
+                        eventType = "autoLifecycleStartFailed",
+                        trigger = trigger,
+                        service = service_name,
+                        urn = urn,
+                        error = %e,
+                        "On-demand provider start failed."
+                    );
+                }
             }
         } else {
             info!(
-                "On-demand start ({}) is disabled for provider: {}",
-                trigger, urn
+                eventType = "autoLifecycleStartSkipped",
+                trigger = trigger,
+                service = service_name,
+                urn = urn,
+                "On-demand provider start is disabled for this service."
             );
         }
     }

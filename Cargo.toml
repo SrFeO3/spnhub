@@ -1,6 +1,6 @@
 [package]
 name = "spnhub"
-version = "0.97.14"
+version = "0.97.15"
 edition = "2024"
 
 [dependencies]

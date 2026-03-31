@@ -8,8 +8,8 @@
 //! - (Planned) Monitoring health.
 //!
 //! ## Runtime Assumptions
-//! - Currently targets **Docker** as the container runtime.
-//! - Future versions may support pluggable backends (e.g., Nomad, Kubernetes).
+//! - Supports **Docker** and **Nomad** as backends.
+//! - The backend is selected based on the `clusterManagerUrn` prefix (e.g., `nomad:`).
 //!
 //! ## Security Note
 //! - This design assumes that the configuration file is benevolent and fully trusted.
@@ -39,6 +39,8 @@ pub struct ContainerHandle {
 pub enum StartError {
     #[error("Docker error: {0}")]
     Docker(#[from] bollard::errors::Error),
+    #[error("Nomad error: {0}")]
+    Nomad(#[from] reqwest::Error),
     #[error("Error: {0}")]
     Other(String),
 }
@@ -48,6 +50,10 @@ pub enum StartError {
 pub enum StopError {
     #[error("Docker error: {0}")]
     Docker(#[from] bollard::errors::Error),
+    #[error("Nomad error: {0}")]
+    Nomad(#[from] reqwest::Error),
+    #[error("Error: {0}")]
+    Other(String),
 }
 
 /// Starts a container for the specified provider configuration.
@@ -57,14 +63,26 @@ pub enum StopError {
 pub async fn start_provider(
     config: &AvailabilityManagementConfig,
 ) -> Result<ContainerHandle, StartError> {
-    let result = docker_backend::start_container(
-        &config.image,
-        config.options.as_deref().unwrap_or(&[]),
-        &config.service_id,
-        config.env.as_ref(),
-        config.command.as_ref(),
-    )
-    .await;
+    let is_nomad = config._cluster_manager_urn
+        .as_deref()
+        .map(|urn| urn.starts_with("nomad:"))
+        .unwrap_or(false);
+
+    let result = if is_nomad {
+        match nomad_backend::scale_task(config, 1).await {
+            Ok(_) => Ok(ContainerHandle { id: config.service_id.clone() }),
+            Err(e) => Err(StartError::Other(e.to_string())),
+        }
+    } else {
+        docker_backend::start_container(
+            &config.image,
+            config.options.as_deref(),
+            &config.service_id,
+            config.env.as_ref(),
+            config.command.as_deref(),
+        )
+        .await
+    };
 
     match &result {
         Ok(handle) => tracing::info!("start_provider result: success, id={}", handle.id),
@@ -77,8 +95,17 @@ pub async fn start_provider(
 pub async fn stop_provider(
     config: &AvailabilityManagementConfig,
 ) -> Result<(), StopError> {
-    // Future: Match backend based on config. For now, use Docker.
-    docker_backend::stop_container(&config.service_id).await
+    let is_nomad = config._cluster_manager_urn
+        .as_deref()
+        .map(|urn| urn.starts_with("nomad:"))
+        .unwrap_or(false);
+
+    if is_nomad {
+        nomad_backend::scale_task(config, 0).await
+            .map_err(|e| StopError::Other(e.to_string()))
+    } else {
+        docker_backend::stop_container(&config.service_id).await
+    }
 }
 
 /// --- Docker Backend Implementation ---
@@ -93,12 +120,15 @@ mod docker_backend {
     /// Starts a Docker container asynchronously.
     pub async fn start_container(
         image: &str,
-        options: &[String],
+        options: Option<&[String]>,
         service_id: &str,
         env: Option<&HashMap<String, String>>,
-        command: Option<&Vec<String>>,
+        command: Option<&[String]>,
     ) -> Result<ContainerHandle, StartError> {
-        tracing::info!("Docker: Starting container for service: {}, image: {}", service_id, image);
+        tracing::info!(
+            "Docker: Starting container. Service: {}, Image: {}, Options: {:?}, Env: {:?}, Command: {:?}",
+            service_id, image, options, env, command
+        );
 
         // Prepare connection to the Unix domain socket. Involves I/O but is a very lightweight synchronous operation.
         let docker = Docker::connect_with_local_defaults()?;
@@ -112,44 +142,46 @@ mod docker_backend {
         let mut privileged = false;
         let mut cap_add = Vec::new();
 
-        let mut i = 0;
-        while i < options.len() {
-            match options[i].as_str() {
-                "-p" | "--publish" => {
-                    if i + 1 < options.len() {
-                        if let Some((host, container)) = options[i + 1].split_once(':') {
-                            let container_port = format!("{}/tcp", container);
-                            let binding = PortBinding {
-                                host_ip: Some("0.0.0.0".to_string()),
-                                host_port: Some(host.to_string()),
-                            };
-                            port_bindings.entry(container_port).or_default().get_or_insert_with(Vec::new).push(binding);
+        if let Some(options) = options {
+            let mut i = 0;
+            while i < options.len() {
+                match options[i].as_str() {
+                    "-p" | "--publish" => {
+                        if i + 1 < options.len() {
+                            if let Some((host, container)) = options[i + 1].split_once(':') {
+                                let container_port = format!("{}/tcp", container);
+                                let binding = PortBinding {
+                                    host_ip: Some("0.0.0.0".to_string()),
+                                    host_port: Some(host.to_string()),
+                                };
+                                port_bindings.entry(container_port).or_default().get_or_insert_with(Vec::new).push(binding);
+                            }
+                            i += 1;
                         }
-                        i += 1;
                     }
-                }
-                "--network" => {
-                    if i + 1 < options.len() {
-                        network_mode = Some(options[i + 1].to_string());
-                        i += 1;
+                    "--network" => {
+                        if i + 1 < options.len() {
+                            network_mode = Some(options[i + 1].to_string());
+                            i += 1;
+                        }
                     }
-                }
-                "-v" | "--volume" => {
-                    if i + 1 < options.len() {
-                        binds.push(options[i + 1].to_string());
-                        i += 1;
+                    "-v" | "--volume" => {
+                        if i + 1 < options.len() {
+                            binds.push(options[i + 1].to_string());
+                            i += 1;
+                        }
                     }
-                }
-                "--privileged" => privileged = true,
-                "--cap-add" => {
-                    if i + 1 < options.len() {
-                        cap_add.push(options[i + 1].to_string());
-                        i += 1;
+                    "--privileged" => privileged = true,
+                    "--cap-add" => {
+                        if i + 1 < options.len() {
+                            cap_add.push(options[i + 1].to_string());
+                            i += 1;
+                        }
                     }
+                    _ => {}
                 }
-                _ => {}
+                i += 1;
             }
-            i += 1;
         }
 
         let env_vars = env.map(|map| map.iter().map(|(k, v)| format!("{}={}", k, v)).collect::<Vec<_>>());
@@ -167,7 +199,7 @@ mod docker_backend {
             image: Some(image.to_string()),
             host_config: Some(host_config),
             env: env_vars,
-            cmd: command.cloned(),
+            cmd: command.map(|v| v.to_vec()),
             ..Default::default()
         };
 
@@ -198,7 +230,7 @@ mod docker_backend {
 
     /// Stops and removes a Docker container asynchronously.
     pub async fn stop_container(service_id: &str) -> Result<(), StopError> {
-        tracing::info!("Docker: Stopping container for service: {}", service_id);
+        tracing::info!("Docker: Stopping container. Service: {}", service_id);
 
         let docker = Docker::connect_with_local_defaults()?;
         let container_name = format!("spn_{}", service_id.replace(|c: char| !c.is_alphanumeric(), "_"));
@@ -225,6 +257,47 @@ mod docker_backend {
             }
         } else {
             tracing::info!("Docker: Container {} removed.", container_name);
+        }
+
+        Ok(())
+    }
+}
+
+/// --- Nomad Backend Implementation ---
+
+mod nomad_backend {
+    use super::*;
+    use serde_json::json;
+
+    /// Scales a Nomad task group to the specified count.
+    pub async fn scale_task(config: &AvailabilityManagementConfig, count: i32) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let urn = config._cluster_manager_urn.as_deref()
+            .ok_or("Nomad cluster manager URN is missing")?;
+
+        let base_url = urn.strip_prefix("nomad:")
+            .ok_or("Invalid Nomad URN prefix (must start with 'nomad:')")?
+            .trim_end_matches('/');
+
+        let url = format!("{}/scale", base_url);
+        let group_id = &config.image;
+
+        tracing::info!("Nomad: Scaling task. URL: {}, Group: {}, Count: {}", url, group_id, count);
+
+        let body = json!({
+            "Target": { "Group": group_id },
+            "Count": count,
+            "ErrorOnConflict": false
+        });
+        tracing::info!("Nomad API Request Body: {}", serde_json::to_string(&body).unwrap_or_default());
+
+        let client = reqwest::Client::new();
+        let response = client.post(url).json(&body).send().await?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response.text().await.unwrap_or_else(|_| "Empty response body".to_string());
+            tracing::error!("Nomad API error response: status={}, body={}", status, error_text);
+            return Err(format!("Nomad API error ({}): {}", status, error_text).into());
         }
 
         Ok(())
