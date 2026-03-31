@@ -1026,8 +1026,6 @@ struct ConsumerHandler {
     provider_urn: Option<String>,
     /// Availability management configuration for provider.
     availability_config: Option<crate::config::AvailabilityManagementConfig>,
-    /// Tracks if the first stream has been accepted.
-    first_stream_accepted: bool,
 }
 
 /// Represents the outcome of the stream proxying loop.
@@ -1107,7 +1105,6 @@ impl ConsumerHandler {
             consumer_connections,
             provider_urn,
             availability_config,
-            first_stream_accepted: false,
         }
     }
 
@@ -1390,10 +1387,6 @@ impl ConsumerHandler {
                 result = self.context.connection.accept_bi() => {
                     match result {
                         Ok((send, recv)) => {
-                            if !self.first_stream_accepted {
-                                info!("First stream accepted from consumer '{}'", self.context.uri);
-                                self.first_stream_accepted = true;
-                            }
                             info!("Bidirectional stream accepted from consumer '{}'", self.context.uri);
                             self.context.total_opened_streams.fetch_add(1, Ordering::Relaxed);
                             let consumer_context = self.context.clone();
