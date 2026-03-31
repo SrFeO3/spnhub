@@ -679,8 +679,18 @@ impl Server {
                                 // Close the QUIC connection. This will trigger its removal from the map in its handler.
                                 conn.close(0u32.into(), b"idle timeout");
 
+                                // Identify associated consumers to notify if stop succeeds
+                                let consumers_to_notify: Vec<(String, quinn::Connection)> = consumer_snapshot
+                                    .iter()
+                                    .filter(|(c_uri, _)| {
+                                        service_map.load().get(c_uri).map_or(false, |info| info.name == *service)
+                                    })
+                                    .cloned()
+                                    .collect();
+
                                 // Stop the underlying microservice.
-                                // Spawn this so it doesn't block the stats reporting task.
+                                // Note: stop_provider only initiates the stop sequence (e.g., sending a command to Docker/Nomad)
+                                // and does not guarantee that the process has completely terminated at the time of return.
                                 let am_config_clone = am_config.clone();
                                 let service_clone = service.clone();
                                 let urn_clone = service_config.urn.clone();
@@ -693,6 +703,12 @@ impl Server {
                                                 urn = urn_clone,
                                                 "Idle provider stopped successfully."
                                             );
+
+                                            // Notify associated consumers via control datagram only on success
+                                            for (c_uri, c_conn) in consumers_to_notify {
+                                                info!("Notifying consumer '{}' that provider for service '{}' is stopped.", c_uri, service_clone);
+                                                let _ = c_conn.send_datagram(b"notify_provider_stopped".to_vec().into());
+                                            }
                                         }
                                         Err(e) => {
                                             warn!(
