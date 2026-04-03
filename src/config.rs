@@ -173,6 +173,7 @@ impl ConfigHotReloadService {
 
 /// Loads the initial configuration from the specified path (URL or file).
 pub async fn load_initial_config(path: &str) -> Result<(AppConfig, String), Box<dyn std::error::Error + Send + Sync>> {    let content = get_config_content(path).await?;
+    info!(eventType = "configLoadStarted", file = path, "Loading initial configuration.");
     let config = match serde_yaml::from_str::<AppConfig>(&content) {
         Ok(config) => config,
         Err(e) => {

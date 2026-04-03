@@ -22,7 +22,7 @@ use tokio::signal::unix::{signal, SignalKind};
 use rustls::crypto::ring::default_provider;
 use tokio::sync::{mpsc, RwLock};
 use tokio::time::{self, Duration, Instant};
-use tracing::{Instrument, error, info, info_span, warn};
+use tracing::{Instrument, debug, error, info, info_span, warn};
 use tracing_subscriber::EnvFilter;
 
 mod config;
@@ -420,7 +420,7 @@ impl Server {
                     });
                 }
                 Some(connecting) = self.endpoint.accept() => {
-                    info!("Connection incoming from {}", connecting.remote_address());
+                    info!("QUIC Connection incoming from {}", connecting.remote_address());
 
                     let provider_connections = self.provider_connections.clone();
                     let consumer_connections = self.consumer_connections.clone();
@@ -433,7 +433,7 @@ impl Server {
                         match connecting.await {
                             Ok(connection) => {
                                 let span = info_span!(
-                                    "connection",
+                                    "quic connection",
                                     id = connection.stable_id(),
                                     remote = %connection.remote_address()
                                 );
@@ -738,11 +738,11 @@ impl Server {
             message = "Stats",
             realm = realm_name,
             hub = hub_name,
-            total_connections = provider_count + consumer_count,
-            tokio_workers,
-            tokio_tasks,
-            provider_connections = provider_count,
-            consumer_connections = consumer_count,
+            totalConnectionCount = provider_count + consumer_count,
+            tokioWorkers = tokio_workers,
+            tokioTasks = tokio_tasks,
+            providerConnectionCount = provider_count,
+            consumerConnectionCount = consumer_count,
         );
 
         // 3. Log stats
@@ -760,14 +760,14 @@ impl Server {
                 realm = realm_name,
                 hub = hub_name,
                 service,
-                cn,
-                id = conn.stable_id(),
+                spnEndPoint = cn,
+                spnSessionId = conn.stable_id(),
                 status = ?status,
-                active_streams,
-                idle_status,
-                rtt_ms = stats.path.rtt.as_millis(),
-                lost_packets = stats.path.lost_packets,
-                " -Provider"
+                activeStreams = active_streams,
+                idleStatus = idle_status,
+                rttMs = stats.path.rtt.as_millis(),
+                lostPackets = stats.path.lost_packets,
+                " -Prov"
             );
         }
 
@@ -780,11 +780,11 @@ impl Server {
                 realm = realm_name,
                 hub = hub_name,
                 service,
-                uri,
-                id = conn.stable_id(),
-                rtt_ms = stats.path.rtt.as_millis(),
-                lost_packets = stats.path.lost_packets,
-                " -Consumer"
+                spnEndPoint = uri,
+                spnSessionId = conn.stable_id(),
+                rttMs = stats.path.rtt.as_millis(),
+                lostPackets = stats.path.lost_packets,
+                " -Cons"
             );
         }
     }
@@ -884,7 +884,7 @@ impl ProviderHandler {
             endPointType = &context.endpoint_type,
             serviceUrn = &context.service_urn,
             remote = %context.connection.remote_address(),
-            "SPN session (QUIC Connection) established"
+            "SPN session (QUIC Connection) started"
         );
         Self {
             context,
@@ -1094,7 +1094,7 @@ impl ConsumerHandler {
             endPointType = &context.endpoint_type,
             serviceUrn = &context.service_urn,
             remote = %context.connection.remote_address(),
-            "SPN session (QUIC Connection) established"
+            "SPN session (QUIC Connection) started"
         );
 
         // Extract configuration needed for consumer handling
@@ -1403,7 +1403,7 @@ impl ConsumerHandler {
                 result = self.context.connection.accept_bi() => {
                     match result {
                         Ok((send, recv)) => {
-                            info!("Bidirectional stream accepted from consumer '{}'", self.context.uri);
+                            debug!("Bidirectional stream accepted from consumer '{}'", self.context.uri);
                             self.context.total_opened_streams.fetch_add(1, Ordering::Relaxed);
                             let consumer_context = self.context.clone();
                             let tx_clone = error_tx.clone();
@@ -1591,7 +1591,7 @@ async fn proxy_consumer_stream_to_provider(
         spnConnectionId = &spn_connection_id,
         consumerSideSpnSessionId = consumer_connection_id,
         providerSideSpnSessionId = provider_connection_id,
-        "SPN connection start"
+        "SPN connection (QUIC stream) started"
     );
 
     // Proxy data in both directions concurrently.
@@ -1631,7 +1631,7 @@ async fn proxy_consumer_stream_to_provider(
                 totalReceiveBytes = bytes_p2c,
                 elapsedTime = duration.num_milliseconds(),
                 disconnectReason = "closed",
-                "SPN connection (QUIC srream) finished"
+                "SPN connection (QUIC stream) ended"
             );
             // The streams will be closed automatically when they are dropped.
             Ok(())
@@ -1650,9 +1650,9 @@ async fn proxy_consumer_stream_to_provider(
                 providerSideSpnSessionId = provider_connection_id,
                 elapsedTime = duration.num_milliseconds(),
                 disconnectReason = reason,
-                error_direction = direction,
-                error_details = %e,
-                "SPN connection (QUIC srream) finished"
+                errorDirection = direction,
+                errorDetails = %e,
+                "SPN connection (QUIC stream) ended"
             );
             Err(e.into())
         }
@@ -1730,8 +1730,8 @@ fn log_connection_close(
         endPointType = &context.endpoint_type,
         serviceUrn = &context.service_urn,
         totalConnectionCount = total_connections,
-        elapsedTime = duration.num_seconds(),
+        elapsedTime = duration.num_milliseconds(),
         terminateReason = terminate_reason,
-        "SPN session (QUIC Connection) closed"
+        "SPN session (QUIC Connection) ended"
     );
 }

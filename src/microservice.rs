@@ -126,8 +126,12 @@ mod docker_backend {
         command: Option<&[String]>,
     ) -> Result<ContainerHandle, StartError> {
         tracing::info!(
-            "Docker: Starting container. Service: {}, Image: {}, Options: {:?}, Env: {:?}, Command: {:?}",
-            service_id, image, options, env, command
+            serviceId = service_id,
+            image,
+            options = ?options,
+            env = ?env,
+            command = ?command,
+            "Docker: Starting container."
         );
 
         // Prepare connection to the Unix domain socket. Involves I/O but is a very lightweight synchronous operation.
@@ -230,7 +234,7 @@ mod docker_backend {
 
     /// Stops and removes a Docker container asynchronously.
     pub async fn stop_container(service_id: &str) -> Result<(), StopError> {
-        tracing::info!("Docker: Stopping container. Service: {}", service_id);
+        tracing::info!(serviceId = service_id, "Docker: Stopping container.");
 
         let docker = Docker::connect_with_local_defaults()?;
         let container_name = format!("spn_{}", service_id.replace(|c: char| !c.is_alphanumeric(), "_"));
@@ -281,14 +285,19 @@ mod nomad_backend {
         let url = format!("{}/scale", base_url);
         let group_id = &config.image;
 
-        tracing::info!("Nomad: Scaling task. URL: {}, Group: {}, Count: {}", url, group_id, count);
+        tracing::info!(
+            url = %url,
+            group = group_id,
+            count = count,
+            "Nomad: Scaling task."
+        );
 
         let body = json!({
             "Target": { "Group": group_id },
             "Count": count,
             "ErrorOnConflict": false
         });
-        tracing::info!("Nomad API Request Body: {}", serde_json::to_string(&body).unwrap_or_default());
+        tracing::debug!("Nomad API Request Body: {}", serde_json::to_string(&body).unwrap_or_default());
 
         let client = reqwest::Client::new();
         let response = client.post(url).json(&body).send().await?;

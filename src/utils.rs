@@ -149,7 +149,6 @@ pub(crate) async fn check_and_get_info_connection(
                     info!("  - Issuer:  {}", parsed_cert.issuer());
                     info!("  - Serial:  {}", parsed_cert.serial);
 
-                    // CN (Common Name)
                     cn = parsed_cert
                         .subject()
                         .iter()
