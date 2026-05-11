@@ -108,6 +108,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let args = Args::parse();
 
+    // QUIC setup
+    default_provider()
+        .install_default()
+        .expect("Failed to install crypto provider");
+
     info!(
         "SPN Hub Server started (Version: {}, PID: {}) with inventory configuration: {}",
         env!("CARGO_PKG_VERSION"),
@@ -121,11 +126,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     // Start hot-reload service
     let reload_service = ConfigHotReloadService::new(args.config.clone(), shared_config.clone(), initial_content);
-
-    //  QUIC setup
-    default_provider()
-        .install_default()
-        .expect("Failed to install crypto provider");
 
     let mut running_hubs: HashMap<HubKey, RunningHub> = HashMap::new();
 
