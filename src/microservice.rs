@@ -348,15 +348,26 @@ mod k8s_backend {
             .as_deref()
             .ok_or("Kubernetes cluster manager URN is missing")?;
 
-        let namespace = urn
+        let body = urn
             .strip_prefix("k8s:")
             .ok_or("Invalid Kubernetes URN prefix (must start with 'k8s:')")?;
 
-        // Use "default" namespace if empty
-        let namespace = if namespace.is_empty() { "default" } else { namespace };
-
         // Load base config from environment
         let mut k8s_config = Config::infer().await?;
+
+        // Optional: Parse "url/namespace" or just "namespace"
+        let namespace = if let Some((url, ns)) = body.rsplit_once('/') {
+            if !url.is_empty() {
+                info!("Kubernetes: Overriding API cluster_url to {}", url);
+                k8s_config.cluster_url = url.parse()?;
+            }
+            ns
+        } else {
+            body
+        };
+
+        // Use "default" namespace if empty
+        let namespace = if namespace.is_empty() { "default" } else { namespace };
 
         // Override bearer token if ACCESS_TOKEN is provided in config env
         if let Some(token) = config.env.as_ref().and_then(|m| m.get("ACCESS_TOKEN")) {
