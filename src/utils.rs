@@ -90,14 +90,19 @@ pub fn create_server_config(
         .with_single_cert(certs, key)?;
     server_config.alpn_protocols = alpn_protocols.iter().map(|&x| x.into()).collect();
 
-    let mut quinn_server_config
-        = quinn::ServerConfig::with_crypto(Arc::new(QuicServerConfig::try_from(Arc::new(server_config))?));
+    let mut quinn_server_config = quinn::ServerConfig::with_crypto(Arc::new(
+        QuicServerConfig::try_from(Arc::new(server_config))?,
+    ));
     Arc::get_mut(&mut quinn_server_config.transport)
         .unwrap()
         .max_concurrent_uni_streams(crate::QUIC_MAX_CONCURRENT_UNI_STREAMS.into())
-        .keep_alive_interval(Some(Duration::from_secs(crate::QUIC_KEEP_ALIVE_INTERVAL_SECS)))
+        .keep_alive_interval(Some(Duration::from_secs(
+            crate::QUIC_KEEP_ALIVE_INTERVAL_SECS,
+        )))
         .datagram_receive_buffer_size(Some(crate::QUIC_DATAGRAM_RECEIVE_BUFFER_SIZE))
-        .max_idle_timeout(Some(Duration::from_secs(crate::QUIC_IDLE_TIMEOUT_SECS).try_into()?));
+        .max_idle_timeout(Some(
+            Duration::from_secs(crate::QUIC_IDLE_TIMEOUT_SECS).try_into()?,
+        ));
 
     Ok(quinn_server_config)
 }
@@ -142,29 +147,29 @@ pub(crate) async fn check_and_get_info_connection(
 
     // certificate
     if let Some(identity) = connection.peer_identity() {
-        if let Some(certs) = identity.downcast_ref::<Vec<CertificateDer<'static>>>() {
-            if let Some(client_cert) = certs.first() {
-                if let Ok((_, parsed_cert)) = parse_x509_certificate(client_cert.as_ref()) {
-                    info!("  - Subject: {}", parsed_cert.subject());
-                    info!("  - Issuer:  {}", parsed_cert.issuer());
-                    info!("  - Serial:  {}", parsed_cert.serial);
+        if let Some(certs) = identity.downcast_ref::<Vec<CertificateDer<'static>>>()
+            && let Some(client_cert) = certs.first()
+        {
+            if let Ok((_, parsed_cert)) = parse_x509_certificate(client_cert.as_ref()) {
+                info!("  - Subject: {}", parsed_cert.subject());
+                info!("  - Issuer:  {}", parsed_cert.issuer());
+                info!("  - Serial:  {}", parsed_cert.serial);
 
-                    cn = parsed_cert
-                        .subject()
-                        .iter()
-                        .flat_map(|rdn| rdn.iter())
-                        .find(|attr| attr.attr_type() == &OID_X509_COMMON_NAME)
-                        .and_then(|attr| attr.attr_value().as_str().ok())
-                        .map(String::from);
+                cn = parsed_cert
+                    .subject()
+                    .iter()
+                    .flat_map(|rdn| rdn.iter())
+                    .find(|attr| attr.attr_type() == &OID_X509_COMMON_NAME)
+                    .and_then(|attr| attr.attr_value().as_str().ok())
+                    .map(String::from);
 
-                    if let Some(cn_val) = &cn {
-                        info!("  - CN:      {}", cn_val);
-                    } else {
-                        info!("  - CN:      Not found");
-                    }
+                if let Some(cn_val) = &cn {
+                    info!("  - CN:      {}", cn_val);
                 } else {
-                    error!("Failed to parse client certificate.");
+                    info!("  - CN:      Not found");
                 }
+            } else {
+                error!("Failed to parse client certificate.");
             }
         }
     } else {

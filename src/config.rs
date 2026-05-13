@@ -26,9 +26,9 @@ use std::sync::Arc;
 
 use arc_swap::ArcSwap;
 use serde::{Deserialize, Serialize};
-use serde_json;
-use tracing::{info, warn, debug, error};
+
 use tokio::sync::Mutex;
+use tracing::{debug, error, info, warn};
 
 /// Application-wide configuration structure
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
@@ -104,7 +104,11 @@ pub struct ConfigHotReloadService {
 }
 
 impl ConfigHotReloadService {
-    pub fn new(config_path: String, shared_config: Arc<ArcSwap<AppConfig>>, initial_content: String) -> Self {
+    pub fn new(
+        config_path: String,
+        shared_config: Arc<ArcSwap<AppConfig>>,
+        initial_content: String,
+    ) -> Self {
         Self {
             config_path,
             shared_config,
@@ -117,7 +121,10 @@ impl ConfigHotReloadService {
         let current_content = match get_config_content(&self.config_path).await {
             Ok(content) => content,
             Err(e) => {
-                warn!("Failed to get configuration content from '{}' for reload: {}", self.config_path, e);
+                warn!(
+                    "Failed to get configuration content from '{}' for reload: {}",
+                    self.config_path, e
+                );
                 return None;
             }
         };
@@ -155,7 +162,10 @@ impl ConfigHotReloadService {
 
         info!("[Debug] Fetched configuration for reload check:");
         for realm in &new_config.realms {
-            debug!("[Debug] - Realm: '{}', disabled: {}", realm.realm_name, realm.disabled);
+            debug!(
+                "[Debug] - Realm: '{}', disabled: {}",
+                realm.realm_name, realm.disabled
+            );
         }
 
         if !last_content.is_empty() {
@@ -172,8 +182,15 @@ impl ConfigHotReloadService {
 }
 
 /// Loads the initial configuration from the specified path (URL or file).
-pub async fn load_initial_config(path: &str) -> Result<(AppConfig, String), Box<dyn std::error::Error + Send + Sync>> {    let content = get_config_content(path).await?;
-    info!(eventType = "configLoadStarted", file = path, "Loading initial configuration.");
+pub async fn load_initial_config(
+    path: &str,
+) -> Result<(AppConfig, String), Box<dyn std::error::Error + Send + Sync>> {
+    let content = get_config_content(path).await?;
+    info!(
+        eventType = "configLoadStarted",
+        file = path,
+        "Loading initial configuration."
+    );
     let config = match serde_yaml::from_str::<AppConfig>(&content) {
         Ok(config) => config,
         Err(e) => {
@@ -201,10 +218,14 @@ pub async fn load_initial_config(path: &str) -> Result<(AppConfig, String), Box<
 }
 
 /// Fetches or reads the configuration content from a given path (URL or file).
-async fn get_config_content(path: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+async fn get_config_content(
+    path: &str,
+) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     if path.starts_with("http://") || path.starts_with("https://") {
         info!("Fetching configuration content from URL: {}", path);
-        fetch_config_from_url(path).await.map(|(_config, content)| content)
+        fetch_config_from_url(path)
+            .await
+            .map(|(_config, content)| content)
     } else if let Some(file_path) = path.strip_prefix("file://") {
         info!("Reading configuration content from file: {}", file_path);
         tokio::fs::read_to_string(file_path)
@@ -309,7 +330,7 @@ impl From<ApiService> for ServiceConfig {
     }
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Default)]
 #[serde(rename_all = "camelCase")]
 struct ApiAvailabilityManagement {
     service_id: String,
@@ -329,26 +350,6 @@ struct ApiAvailabilityManagement {
     #[allow(dead_code)]
     #[serde(default)]
     mount_points: Option<Vec<ApiMountPoint>>,
-}
-
-impl Default for ApiAvailabilityManagement {
-    fn default() -> Self {
-        Self {
-            service_id: String::new(),
-            cluster_manager_urn: String::new(),
-            description: None,
-            start_at: None,
-            stop_at: None,
-            ondemand_start_on_consumer: None,
-            ondemand_start_on_payload: None,
-            idle_timeout: None,
-            image: None,
-            command: None,
-            options: None,
-            env: None,
-            mount_points: None,
-        }
-    }
 }
 
 impl From<ApiAvailabilityManagement> for AvailabilityManagementConfig {
@@ -378,16 +379,31 @@ struct ApiMountPoint {
     target: String,
 }
 
-async fn fetch_config_from_url(url: &str) -> Result<(AppConfig, String), Box<dyn std::error::Error + Send + Sync>> {
+async fn fetch_config_from_url(
+    url: &str,
+) -> Result<(AppConfig, String), Box<dyn std::error::Error + Send + Sync>> {
     // Helper to fetch and deserialize, with better error reporting
-    async fn fetch_and_deserialize<T: serde::de::DeserializeOwned>(client: &reqwest::Client, url: &str) -> Result<T, Box<dyn std::error::Error + Send + Sync>> {
+    async fn fetch_and_deserialize<T: serde::de::DeserializeOwned>(
+        client: &reqwest::Client,
+        url: &str,
+    ) -> Result<T, Box<dyn std::error::Error + Send + Sync>> {
         info!("Fetching from {}", url);
-        let response = client.get(url).send().await.map_err(|e| format!("Network error while fetching from {}: {}", url, e))?;
+        let response = client
+            .get(url)
+            .send()
+            .await
+            .map_err(|e| format!("Network error while fetching from {}: {}", url, e))?;
         let status = response.status();
-        let body_text = response.text().await.map_err(|e| format!("Failed to read response body from {}: {}", url, e))?;
+        let body_text = response
+            .text()
+            .await
+            .map_err(|e| format!("Failed to read response body from {}: {}", url, e))?;
         if !status.is_success() {
-            error!("API at {} returned error status {}: {}", url, status, &body_text);
-            return Err(format!("API error for {}: status {}" , url, status).into());
+            error!(
+                "API at {} returned error status {}: {}",
+                url, status, &body_text
+            );
+            return Err(format!("API error for {}: status {}", url, status).into());
         }
         serde_json::from_str::<T>(&body_text).map_err(|e| {
             error!(
@@ -415,8 +431,12 @@ async fn fetch_config_from_url(url: &str) -> Result<(AppConfig, String), Box<dyn
 
         let mut hub_configs = Vec::new();
         for api_hub in api_hubs {
-            let services_url = format!("{}/realms/{}/hubs/{}/services", base_url, api_realm.name, api_hub.name);
-            let api_services: Vec<ApiService> = fetch_and_deserialize(&client, &services_url).await?;
+            let services_url = format!(
+                "{}/realms/{}/hubs/{}/services",
+                base_url, api_realm.name, api_hub.name
+            );
+            let api_services: Vec<ApiService> =
+                fetch_and_deserialize(&client, &services_url).await?;
             let services = api_services.into_iter().map(ServiceConfig::from).collect();
             hub_configs.push(api_hub.into_config(services));
         }
@@ -424,7 +444,9 @@ async fn fetch_config_from_url(url: &str) -> Result<(AppConfig, String), Box<dyn
         realm_configs.push(api_realm.into_config(hub_configs));
     }
 
-    let config = AppConfig { realms: realm_configs };
+    let config = AppConfig {
+        realms: realm_configs,
+    };
     // Serialize to YAML to use as "content" for change detection
     let content = serde_yaml::to_string(&config)?;
     Ok((config, content))

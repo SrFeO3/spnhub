@@ -11,16 +11,16 @@
 //! ## TODO
 //! - Replace target provider on consumer reconnection.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, hash_map::Entry};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicI64, AtomicUsize, Ordering};
 
 use arc_swap::ArcSwap;
 use chrono::{DateTime, Utc};
 use clap::Parser;
-use tokio::signal::unix::{signal, SignalKind};
 use rustls::crypto::ring::default_provider;
-use tokio::sync::{mpsc, RwLock};
+use tokio::signal::unix::{SignalKind, signal};
+use tokio::sync::{RwLock, mpsc};
 use tokio::time::{self, Duration, Instant};
 use tracing::{Instrument, debug, error, info, info_span, warn};
 use tracing_subscriber::EnvFilter;
@@ -29,7 +29,9 @@ mod config;
 mod microservice;
 mod utils;
 
-use crate::config::{AppConfig, ConfigHotReloadService, HubConfig, RealmConfig, load_initial_config};
+use crate::config::{
+    AppConfig, ConfigHotReloadService, HubConfig, RealmConfig, load_initial_config,
+};
 
 // --- QUIC Parameters ---
 const QUIC_MAX_CONCURRENT_UNI_STREAMS: u8 = 0;
@@ -67,7 +69,11 @@ const APP_ERR_CODE_NO_PROVIDER_FOUND: u32 = 100;
 #[derive(Parser)]
 struct Args {
     /// Path to the configuration file or URL of the repository server.
-    #[arg(long, env = "SPNHUB_INVENTORY_URL", default_value = "http://localhost:3000/v1")]
+    #[arg(
+        long,
+        env = "SPNHUB_INVENTORY_URL",
+        default_value = "http://localhost:3000/v1"
+    )]
     config: String,
 }
 
@@ -125,14 +131,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let shared_config = Arc::new(ArcSwap::from_pointee(initial_config.clone()));
 
     // Start hot-reload service
-    let reload_service = ConfigHotReloadService::new(args.config.clone(), shared_config.clone(), initial_content);
+    let reload_service =
+        ConfigHotReloadService::new(args.config.clone(), shared_config.clone(), initial_content);
 
     let mut running_hubs: HashMap<HubKey, RunningHub> = HashMap::new();
 
     // Initial start
     reconcile_hubs(&initial_config, &mut running_hubs, shared_config.clone()).await;
 
-    info!("Started {} hubs. Waiting for connections...", running_hubs.len());
+    info!(
+        "Started {} hubs. Waiting for connections...",
+        running_hubs.len()
+    );
 
     let mut sigusr1 = signal(SignalKind::user_defined1())?;
     let mut sigterm = signal(SignalKind::terminate())?;
@@ -183,7 +193,10 @@ async fn reconcile_hubs(
             realm.realm_name, realm.disabled
         );
         for hub in &realm.hubs {
-            info!("  - Hub: '{}' listening on {}:{}", hub.name, hub.server_address, hub.server_port);
+            info!(
+                "  - Hub: '{}' listening on {}:{}",
+                hub.name, hub.server_address, hub.server_port
+            );
         }
     }
 
@@ -193,7 +206,9 @@ async fn reconcile_hubs(
         let (realm_name, hub_name) = key;
 
         // Find corresponding hub in new config
-        let new_config_entry = config.realms.iter()
+        let new_config_entry = config
+            .realms
+            .iter()
             .find(|r| r.realm_name == *realm_name && !r.disabled)
             .and_then(|r| r.hubs.iter().find(|h| h.name == *hub_name).map(|h| (r, h)));
 
@@ -201,26 +216,39 @@ async fn reconcile_hubs(
             None => {
                 // Not found in new config (or realm disabled) -> Remove
                 to_stop.push(key.clone());
-            },
+            }
             Some((new_realm, new_hub)) => {
                 // Check if restart is needed (Address/Port change)
-                if running_hub.config.server_address != new_hub.server_address ||
-                   running_hub.config.server_port != new_hub.server_port {
-                    info!("Network configuration changed for hub: {} (Realm: {}). Restarting...", hub_name, realm_name);
+                if running_hub.config.server_address != new_hub.server_address
+                    || running_hub.config.server_port != new_hub.server_port
+                {
+                    info!(
+                        "Network configuration changed for hub: {} (Realm: {}). Restarting...",
+                        hub_name, realm_name
+                    );
                     to_stop.push(key.clone());
                 } else {
                     // Check if certificate update is needed
-                    if running_hub.config.server_cert != new_hub.server_cert ||
-                       running_hub.config.server_cert_key != new_hub.server_cert_key ||
-                       running_hub.realm_ca_cert != new_realm.realm_ca_cert {
-                        info!("Certificate changed for hub: {}. Reloading certificates...", hub_name);
+                    if running_hub.config.server_cert != new_hub.server_cert
+                        || running_hub.config.server_cert_key != new_hub.server_cert_key
+                        || running_hub.realm_ca_cert != new_realm.realm_ca_cert
+                    {
+                        info!(
+                            "Certificate changed for hub: {}. Reloading certificates...",
+                            hub_name
+                        );
                         let reload_result = || -> Result<(), Box<dyn std::error::Error>> {
                             let (certs, key, truststore) = utils::load_certs_and_key_from_strings(
                                 &new_hub.server_cert,
                                 &new_hub.server_cert_key,
                                 &new_realm.realm_ca_cert,
                             )?;
-                            let server_config = utils::create_server_config(certs, key, truststore, &[b"sc01-provider", b"sc01-consumer"])?;
+                            let server_config = utils::create_server_config(
+                                certs,
+                                key,
+                                truststore,
+                                &[b"sc01-provider", b"sc01-consumer"],
+                            )?;
                             running_hub.endpoint.set_server_config(Some(server_config));
                             Ok(())
                         };
@@ -238,7 +266,10 @@ async fn reconcile_hubs(
 
                     // Check if service list has changed and reload the service map if so.
                     if running_hub.config.services != new_hub.services {
-                        info!("Service list changed for hub: {}. Reloading service map...", hub_name);
+                        info!(
+                            "Service list changed for hub: {}. Reloading service map...",
+                            hub_name
+                        );
                         let new_service_map = Arc::new(build_service_map(&new_hub.services));
                         running_hub.service_map_swap.store(new_service_map);
                         info!("Service map reloaded for hub: {}", hub_name);
@@ -266,11 +297,14 @@ async fn reconcile_hubs(
         }
         for hub in &realm.hubs {
             let key = (realm.realm_name.clone(), hub.name.clone());
-            if !running_hubs.contains_key(&key) {
-                info!("Starting hub: {} (Realm: {}) on host: {}", hub.name, realm.realm_name, hub.server_address);
+            if let Entry::Vacant(e) = running_hubs.entry(key) {
+                info!(
+                    "Starting hub: {} (Realm: {}) on host: {}",
+                    hub.name, realm.realm_name, hub.server_address
+                );
                 match start_hub(realm, hub, shared_config.clone()).await {
                     Ok(running_hub) => {
-                        running_hubs.insert(key, running_hub);
+                        e.insert(running_hub);
                     }
                     Err(e) => {
                         error!("Failed to start hub {}: {}", hub.name, e);
@@ -321,7 +355,10 @@ async fn start_hub(
     let consumer_connections = Arc::new(RwLock::new(HashMap::new()));
 
     let service_map = build_service_map(&hub.services);
-    info!("Initial service map for hub {}: {:?}", hub.name, service_map);
+    info!(
+        "Initial service map for hub {}: {:?}",
+        hub.name, service_map
+    );
     let service_map_swap = Arc::new(ArcSwap::from_pointee(service_map));
 
     let server = Server::new(
@@ -378,7 +415,12 @@ impl Server {
         service_map: Arc<ArcSwap<HashMap<String, ServiceInfo>>>,
         shared_config: Arc<ArcSwap<crate::config::AppConfig>>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        info!("Listening on {} (Realm: {}, Hub: {})", endpoint.local_addr()?, realm_name, hub_name);
+        info!(
+            "Listening on {} (Realm: {}, Hub: {})",
+            endpoint.local_addr()?,
+            realm_name,
+            hub_name
+        );
         Ok(Self {
             realm_name,
             hub_name,
@@ -392,7 +434,10 @@ impl Server {
 
     /// Runs the main server loop to accept connections.
     async fn run(&self, mut shutdown_rx: mpsc::Receiver<ShutdownMode>) {
-        info!("Server (Realm: {}, Hub: {}) is ready to accept connections.", self.realm_name, self.hub_name);
+        info!(
+            "Server (Realm: {}, Hub: {}) is ready to accept connections.",
+            self.realm_name, self.hub_name
+        );
 
         let mut stats_interval = time::interval(Duration::from_secs(STATS_REPORT_INTERVAL_SECS));
         // Prevent tick buildup if processing lags
@@ -571,7 +616,10 @@ impl Server {
 
         // Wait for all connections to be gracefully shut down.
         self.endpoint.wait_idle().await;
-        info!("Shutdown complete (Realm: {}, Hub: {}).", self.realm_name, self.hub_name);
+        info!(
+            "Shutdown complete (Realm: {}, Hub: {}).",
+            self.realm_name, self.hub_name
+        );
     }
 
     /// Periodically updates provider idle status and reports statistics for all connections.
@@ -643,7 +691,9 @@ impl Server {
             let snapshot: Vec<_> = consumers_lock
                 .iter()
                 .flat_map(|(uri, conns)| {
-                    conns.iter().map(move |(_id, entry)| (uri.clone(), entry.connection.clone()))
+                    conns
+                        .values()
+                        .map(|entry| (uri.clone(), entry.connection.clone()))
                 })
                 .collect();
             (snapshot, consumer_count)
@@ -658,70 +708,80 @@ impl Server {
             .and_then(|r| r.hubs.iter().find(|h| h.name == *hub_name))
         {
             for (service, _cn, conn, _status, _opened, _closed, idle_since) in &provider_snapshot {
-                if let Some(since) = idle_since {
-                    if let Some(service_config) = hub_config.services.iter().find(|s| &s.name == service) {
-                        let am_config = &service_config.availability_management;
-                        let idle_timeout = am_config.idle_timeout;
+                if let Some(since) = idle_since
+                    && let Some(service_config) =
+                        hub_config.services.iter().find(|s| &s.name == service)
+                {
+                    let am_config = &service_config.availability_management;
+                    let idle_timeout = am_config.idle_timeout;
 
-                        if idle_timeout > 0 {
-                            let idle_duration = (Utc::now() - *since).num_seconds() as u64;
-                            if idle_duration >= idle_timeout {
-                                info!(
-                                    eventType = "autoLifecycleStopInitiated",
-                                    service = service,
-                                    urn = service_config.urn,
-                                    image = am_config.image,
-                                    idle_duration = idle_duration,
-                                    idle_timeout = idle_timeout,
-                                    "Idle provider timeout reached. Initiating stop."
-                                );
+                    if idle_timeout > 0 {
+                        let idle_duration = (Utc::now() - *since).num_seconds() as u64;
+                        if idle_duration >= idle_timeout {
+                            info!(
+                                eventType = "autoLifecycleStopInitiated",
+                                service = service,
+                                urn = service_config.urn,
+                                image = am_config.image,
+                                idle_duration = idle_duration,
+                                idle_timeout = idle_timeout,
+                                "Idle provider timeout reached. Initiating stop."
+                            );
 
-                                // Close the QUIC connection. This will trigger its removal from the map in its handler.
-                                conn.close(0u32.into(), b"idle timeout");
+                            // Close the QUIC connection. This will trigger its removal from the map in its handler.
+                            conn.close(0u32.into(), b"idle timeout");
 
-                                // Identify associated consumers to notify if stop succeeds
-                                let consumers_to_notify: Vec<(String, quinn::Connection)> = consumer_snapshot
+                            // Identify associated consumers to notify if stop succeeds
+                            let consumers_to_notify: Vec<(String, quinn::Connection)> =
+                                consumer_snapshot
                                     .iter()
                                     .filter(|(c_uri, _)| {
-                                        service_map.load().get(c_uri).map_or(false, |info| info.name == *service)
+                                        service_map
+                                            .load()
+                                            .get(c_uri)
+                                            .is_some_and(|info| info.name == *service)
                                     })
                                     .cloned()
                                     .collect();
 
-                                // Stop the underlying microservice.
-                                // Note: stop_provider only initiates the stop sequence (e.g., sending a command to Docker/Nomad)
-                                // and does not guarantee that the process has completely terminated at the time of return.
-                                let am_config_clone = am_config.clone();
-                                let service_clone = service.clone();
-                                let urn_clone = service_config.urn.clone();
-                                tokio::spawn(async move {
-                                    match microservice::stop_provider(&am_config_clone).await {
-                                        Ok(_) => {
-                                            info!(
-                                                eventType = "autoLifecycleStopSuccess",
-                                                service = service_clone,
-                                                urn = urn_clone,
-                                                "Idle provider stopped successfully."
-                                            );
+                            // Stop the underlying microservice.
+                            // Note: stop_provider only initiates the stop sequence (e.g., sending a command to Docker/Nomad)
+                            // and does not guarantee that the process has completely terminated at the time of return.
+                            let am_config_clone = am_config.clone();
+                            let service_clone = service.clone();
+                            let urn_clone = service_config.urn.clone();
+                            tokio::spawn(async move {
+                                match microservice::stop_provider(&am_config_clone).await {
+                                    Ok(_) => {
+                                        info!(
+                                            eventType = "autoLifecycleStopSuccess",
+                                            service = service_clone,
+                                            urn = urn_clone,
+                                            "Idle provider stopped successfully."
+                                        );
 
-                                            // Notify associated consumers via control datagram only on success
-                                            for (c_uri, c_conn) in consumers_to_notify {
-                                                info!("Notifying consumer '{}' that provider for service '{}' is stopped.", c_uri, service_clone);
-                                                let _ = c_conn.send_datagram(b"notify_provider_stopped".to_vec().into());
-                                            }
-                                        }
-                                        Err(e) => {
-                                            warn!(
-                                                eventType = "autoLifecycleStopFailed",
-                                                service = service_clone,
-                                                urn = urn_clone,
-                                                error = %e,
-                                                "Idle provider failed to stop."
+                                        // Notify associated consumers via control datagram only on success
+                                        for (c_uri, c_conn) in consumers_to_notify {
+                                            info!(
+                                                "Notifying consumer '{}' that provider for service '{}' is stopped.",
+                                                c_uri, service_clone
+                                            );
+                                            let _ = c_conn.send_datagram(
+                                                b"notify_provider_stopped".to_vec().into(),
                                             );
                                         }
                                     }
-                                });
-                            }
+                                    Err(e) => {
+                                        warn!(
+                                            eventType = "autoLifecycleStopFailed",
+                                            service = service_clone,
+                                            urn = urn_clone,
+                                            error = %e,
+                                            "Idle provider failed to stop."
+                                        );
+                                    }
+                                }
+                            });
                         }
                     }
                 }
@@ -774,7 +834,10 @@ impl Server {
         for (uri, conn) in consumer_snapshot {
             let stats = conn.stats();
             let service_map_ref = service_map.load();
-            let service = service_map_ref.get(&uri).map(|s| s.name.as_str()).unwrap_or("unknown");
+            let service = service_map_ref
+                .get(&uri)
+                .map(|s| s.name.as_str())
+                .unwrap_or("unknown");
             info!(
                 type = "consumer",
                 realm = realm_name,
@@ -789,7 +852,6 @@ impl Server {
         }
     }
 }
-
 
 /// Holds contextual information for a single connection.
 #[derive(Clone)]
@@ -906,23 +968,37 @@ impl ProviderHandler {
         tokio::spawn(async move {
             while let Ok(bytes) = datagram_conn.read_datagram().await {
                 let message = String::from_utf8_lossy(&bytes);
-                info!("Received control datagram from provider '{}': {:?}", provider_uri, message);
+                info!(
+                    "Received control datagram from provider '{}': {:?}",
+                    provider_uri, message
+                );
 
                 match message.trim() {
                     "notify_shutdown" => {
-                        info!("Provider '{}' notified graceful shutdown. Marking as ShuttingDown.", provider_uri);
+                        info!(
+                            "Provider '{}' notified graceful shutdown. Marking as ShuttingDown.",
+                            provider_uri
+                        );
                         let mut providers_by_service = provider_connections.write().await;
-                        if let Some(providers_for_service) = providers_by_service.get_mut(&service_name) {
-                            if let Some(provider_entry) = providers_for_service.get_mut(&connection_id) {
-                                provider_entry.status = ProviderStatus::ShuttingDown;
-                                info!("Provider '{}' status set to ShuttingDown. It will no longer accept new consumers.", provider_uri);
-                            }
+                        if let Some(providers_for_service) =
+                            providers_by_service.get_mut(&service_name)
+                            && let Some(provider_entry) =
+                                providers_for_service.get_mut(&connection_id)
+                        {
+                            provider_entry.status = ProviderStatus::ShuttingDown;
+                            info!(
+                                "Provider '{}' status set to ShuttingDown. It will no longer accept new consumers.",
+                                provider_uri
+                            );
                         }
                         // The provider client is expected to close the connection after its own grace period.
                         // The connection.closed().await in the run() loop will handle the final cleanup.
                     }
                     _ => {
-                        warn!("Unknown control message from provider '{}': {}", provider_uri, message);
+                        warn!(
+                            "Unknown control message from provider '{}': {}",
+                            provider_uri, message
+                        );
                     }
                 }
             }
@@ -942,8 +1018,14 @@ impl ProviderHandler {
                 .or_default();
 
             // Check if there is ANY Active provider for this service
-            let has_active = service_map.values().any(|v| v.status == ProviderStatus::Active);
-            let status = if has_active { ProviderStatus::StandBy } else { ProviderStatus::Active };
+            let has_active = service_map
+                .values()
+                .any(|v| v.status == ProviderStatus::Active);
+            let status = if has_active {
+                ProviderStatus::StandBy
+            } else {
+                ProviderStatus::Active
+            };
 
             let entry = ProviderEntry {
                 connection: self.context.connection.clone(),
@@ -989,10 +1071,13 @@ impl ProviderHandler {
                 // Check if the disconnecting provider was active before removing it.
                 let was_active = providers_for_service
                     .get(&self.context.connection_id)
-                    .map_or(false, |e| e.status == ProviderStatus::Active);
+                    .is_some_and(|e| e.status == ProviderStatus::Active);
 
                 // Remove the provider from the map.
-                if providers_for_service.remove(&self.context.connection_id).is_some() {
+                if providers_for_service
+                    .remove(&self.context.connection_id)
+                    .is_some()
+                {
                     info!(
                         "Provider '{}' removed from connection map.",
                         self.context.uri
@@ -1000,20 +1085,25 @@ impl ProviderHandler {
 
                     // If an active provider was removed and no other active provider exists for this service,
                     // promote the oldest standby provider to maintain service availability.
-                    if was_active && !providers_for_service.values().any(|e| e.status == ProviderStatus::Active) {
-                        let to_promote_key = providers_for_service.iter()
+                    if was_active
+                        && !providers_for_service
+                            .values()
+                            .any(|e| e.status == ProviderStatus::Active)
+                    {
+                        let to_promote_key = providers_for_service
+                            .iter()
                             .filter(|(_, e)| e.status == ProviderStatus::StandBy)
                             .min_by_key(|(_, e)| e.created_at)
                             .map(|(k, _)| *k);
 
-                        if let Some(key) = to_promote_key {
-                            if let Some(entry) = providers_for_service.get_mut(&key) {
-                                entry.status = ProviderStatus::Active;
-                                info!(
-                                    "Promoted standby provider '{}' to Active for service '{}' due to active provider disconnection.",
-                                    entry.uri, self.context.service
-                                );
-                            }
+                        if let Some(key) = to_promote_key
+                            && let Some(entry) = providers_for_service.get_mut(&key)
+                        {
+                            entry.status = ProviderStatus::Active;
+                            info!(
+                                "Promoted standby provider '{}' to Active for service '{}' due to active provider disconnection.",
+                                entry.uri, self.context.service
+                            );
                         }
                     }
 
@@ -1199,23 +1289,28 @@ impl ConsumerHandler {
             // Wait for datagrams (signals) from the consumer in a loop
             while let Ok(bytes) = datagram_conn.read_datagram().await {
                 let message = String::from_utf8_lossy(&bytes);
-                info!("Received control datagram from consumer '{}': {:?}", consumer_uri, message);
+                info!(
+                    "Received control datagram from consumer '{}': {:?}",
+                    consumer_uri, message
+                );
 
                 match message.trim() {
                     "request_provider_start" => {
-                        if let (Some(urn), Some(am_config)) = (&provider_urn, &availability_config) {
+                        if let (Some(urn), Some(am_config)) = (&provider_urn, &availability_config)
+                        {
                             // -- Rate limit logic to prevent abuse --
                             let now = Instant::now();
 
-                            if let Some(last) = last_ondemand_service_start_request_at {
-                                if now.duration_since(last) < ONDEMAND_SERVICE_START_RATE_LIMIT_PER_CONSUMER {
-                                    warn!(
-                                        service = %service_name,
-                                        consumer = %consumer_uri,
-                                        "On-demand start request ignored due to rate limiting (per-connection)."
-                                    );
-                                    continue;
-                                }
+                            if let Some(last) = last_ondemand_service_start_request_at
+                                && now.duration_since(last)
+                                    < ONDEMAND_SERVICE_START_RATE_LIMIT_PER_CONSUMER
+                            {
+                                warn!(
+                                    service = %service_name,
+                                    consumer = %consumer_uri,
+                                    "On-demand start request ignored due to rate limiting (per-connection)."
+                                );
+                                continue;
                             }
                             last_ondemand_service_start_request_at = Some(now);
                             // --- End rate limit logic ---
@@ -1228,16 +1323,23 @@ impl ConsumerHandler {
                                     &urn,
                                     &am_config,
                                     &service_name,
-                                    "payload"
-                                ).await;
+                                    "payload",
+                                )
+                                .await;
                             });
                         }
                     }
                     "notify_shutdown" => {
-                        info!("Consumer '{}' notified graceful shutdown start.", consumer_uri);
+                        info!(
+                            "Consumer '{}' notified graceful shutdown start.",
+                            consumer_uri
+                        );
                     }
                     _ => {
-                        warn!("Unknown control message from consumer '{}': {}", consumer_uri, message);
+                        warn!(
+                            "Unknown control message from consumer '{}': {}",
+                            consumer_uri, message
+                        );
                     }
                 }
             }
@@ -1261,14 +1363,17 @@ impl ConsumerHandler {
             let (found_active, has_standby) = {
                 let providers = self.provider_connections.read().await;
                 if let Some(map) = providers.get(&self.context.service) {
-                    let active = map.values().find(|e| e.status == ProviderStatus::Active).map(|e| {
-                        (
-                            e.uri.clone(),
-                            e.connection.clone(),
-                            e.total_opened_streams.clone(),
-                            e.total_closed_streams.clone(),
-                        )
-                    });
+                    let active = map
+                        .values()
+                        .find(|e| e.status == ProviderStatus::Active)
+                        .map(|e| {
+                            (
+                                e.uri.clone(),
+                                e.connection.clone(),
+                                e.total_opened_streams.clone(),
+                                e.total_closed_streams.clone(),
+                            )
+                        });
                     let standby = map.values().any(|e| e.status == ProviderStatus::StandBy);
                     (active, standby)
                 } else {
@@ -1277,7 +1382,10 @@ impl ConsumerHandler {
             };
 
             if let Some((cn, conn, opened, closed)) = found_active {
-                info!("Found matching provider '{}' for service '{}'.", cn, self.context.service);
+                info!(
+                    "Found matching provider '{}' for service '{}'.",
+                    cn, self.context.service
+                );
                 self.target_provider = Some((conn, opened, closed));
                 return;
             }
@@ -1288,11 +1396,20 @@ impl ConsumerHandler {
                 let service_map = providers.entry(self.context.service.clone()).or_default();
 
                 // Double check Active (race condition)
-                if let Some(active) = service_map.values().find(|e| e.status == ProviderStatus::Active) {
-                     Some((active.uri.clone(), active.connection.clone(), active.total_opened_streams.clone(), active.total_closed_streams.clone()))
+                if let Some(active) = service_map
+                    .values()
+                    .find(|e| e.status == ProviderStatus::Active)
+                {
+                    Some((
+                        active.uri.clone(),
+                        active.connection.clone(),
+                        active.total_opened_streams.clone(),
+                        active.total_closed_streams.clone(),
+                    ))
                 } else {
                     // Find a StandBy provider to promote
-                    let standby_key = service_map.iter()
+                    let standby_key = service_map
+                        .iter()
                         .filter(|(_, e)| e.status == ProviderStatus::StandBy)
                         .min_by_key(|(_, e)| e.created_at)
                         .map(|(k, _)| *k);
@@ -1300,9 +1417,19 @@ impl ConsumerHandler {
                     if let Some(key) = standby_key {
                         if let Some(entry) = service_map.get_mut(&key) {
                             entry.status = ProviderStatus::Active;
-                            info!("Promoted provider '{}' to Active for service '{}'", entry.uri, self.context.service);
-                            Some((entry.uri.clone(), entry.connection.clone(), entry.total_opened_streams.clone(), entry.total_closed_streams.clone()))
-                        } else { None }
+                            info!(
+                                "Promoted provider '{}' to Active for service '{}'",
+                                entry.uri, self.context.service
+                            );
+                            Some((
+                                entry.uri.clone(),
+                                entry.connection.clone(),
+                                entry.total_opened_streams.clone(),
+                                entry.total_closed_streams.clone(),
+                            ))
+                        } else {
+                            None
+                        }
                     } else {
                         None
                     }
@@ -1474,7 +1601,9 @@ impl ConsumerHandler {
         // Add the connection to the shared map.
         {
             let mut consumers_by_uri = self.consumer_connections.write().await;
-            let entry = ConsumerEntry { connection: self.context.connection.clone() };
+            let entry = ConsumerEntry {
+                connection: self.context.connection.clone(),
+            };
             consumers_by_uri
                 .entry(self.context.uri.clone())
                 .or_default()
@@ -1493,25 +1622,33 @@ impl ConsumerHandler {
             self.find_and_set_target_provider(search_interval, search_timeout)
                 .await;
 
-            let (provider_conn, total_opened_streams, total_closed_streams) = match self.target_provider.clone() {
-                Some(val) => val,
-                None => {
-                    warn!(
-                        "No active provider found for service '{}'. Closing connection.",
-                        self.context.service
-                    );
-                    let app_close = quinn::ApplicationClose {
-                        error_code: APP_ERR_CODE_NO_PROVIDER_FOUND.into(),
-                        reason: b"No provider available for the requested service"
-                            .to_vec()
-                            .into(),
-                    };
-                    break 'main_loop quinn::ConnectionError::ApplicationClosed(app_close);
-                }
-            };
+            let (provider_conn, total_opened_streams, total_closed_streams) =
+                match self.target_provider.clone() {
+                    Some(val) => val,
+                    None => {
+                        warn!(
+                            "No active provider found for service '{}'. Closing connection.",
+                            self.context.service
+                        );
+                        let app_close = quinn::ApplicationClose {
+                            error_code: APP_ERR_CODE_NO_PROVIDER_FOUND.into(),
+                            reason: b"No provider available for the requested service"
+                                .to_vec()
+                                .into(),
+                        };
+                        break 'main_loop quinn::ConnectionError::ApplicationClosed(app_close);
+                    }
+                };
 
             // 2. Start proxying streams with the found provider.
-            match self.proxy_streams_with_provider(provider_conn, total_opened_streams, total_closed_streams).await {
+            match self
+                .proxy_streams_with_provider(
+                    provider_conn,
+                    total_opened_streams,
+                    total_closed_streams,
+                )
+                .await
+            {
                 ProxyLoopResult::ProviderError => {
                     // A recoverable provider error occurred, loop again to find a new one.
                     // Brief pause to avoid busy loop if the broken provider is not yet removed from the map.
@@ -1580,7 +1717,9 @@ async fn proxy_consumer_stream_to_provider(
 
     // Increment open stream count and ensure close count is incremented on scope exit.
     total_opened_streams.fetch_add(1, Ordering::Relaxed);
-    let _closed_stream_guard = ProviderStreamCounterGuard { counter: total_closed_streams };
+    let _closed_stream_guard = ProviderStreamCounterGuard {
+        counter: total_closed_streams,
+    };
 
     let spn_connection_id = format!("{}-{}", consumer_stream_id, provider_stream_id);
     let start_at = Utc::now();
@@ -1600,7 +1739,7 @@ async fn proxy_consumer_stream_to_provider(
             .await
             .map_err(|e| (e, "Consumer->Provider copy"))?;
         provider_send.finish().map_err(|e| {
-            let io_err = std::io::Error::new(std::io::ErrorKind::Other, e);
+            let io_err = std::io::Error::other(e);
             (io_err, "Consumer->Provider finish")
         })?;
         Ok(bytes)
@@ -1610,7 +1749,7 @@ async fn proxy_consumer_stream_to_provider(
             .await
             .map_err(|e| (e, "Provider->Consumer copy"))?;
         consumer_send.finish().map_err(|e| {
-            let io_err = std::io::Error::new(std::io::ErrorKind::Other, e);
+            let io_err = std::io::Error::other(e);
             (io_err, "Provider->Consumer finish")
         })?;
         Ok(bytes)
@@ -1636,9 +1775,12 @@ async fn proxy_consumer_stream_to_provider(
             // The streams will be closed automatically when they are dropped.
             Ok(())
         }
-        Err((e, direction)) => { // This is (std::io::Error, &str)
+        Err((e, direction)) => {
+            // This is (std::io::Error, &str)
             let reason = match e.kind() {
-                std::io::ErrorKind::ConnectionReset | std::io::ErrorKind::BrokenPipe => "closedByPeer",
+                std::io::ErrorKind::ConnectionReset | std::io::ErrorKind::BrokenPipe => {
+                    "closedByPeer"
+                }
                 _ => "error",
             };
 
@@ -1696,7 +1838,10 @@ fn log_connection_close(
             );
         }
         quinn::ConnectionError::TimedOut => {
-            warn!("{} connection for '{}' timed out.", context.endpoint_type, context.uri);
+            warn!(
+                "{} connection for '{}' timed out.",
+                context.endpoint_type, context.uri
+            );
         }
         quinn::ConnectionError::LocallyClosed => {
             info!(
